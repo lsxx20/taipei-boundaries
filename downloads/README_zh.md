@@ -7,7 +7,7 @@
 
 ## 檔案
 
-網站（https://sixianli.com/taipei-boundaries/）提供的下載：
+網站（https://lsxx20.github.io/taipei-boundaries/）提供的下載：
 
 - `taipei_boundaries_geojson.zip`：所有圖層，每層一個 GeoJSON 檔，WGS84
 - `taipei_boundaries_gpkg.zip`：所有圖層，一個 GeoPackage 檔，TWD97
