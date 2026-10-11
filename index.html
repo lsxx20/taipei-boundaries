@@ -194,6 +194,20 @@ svg.map { position: relative; }
 .fac-links a { color: var(--accent); text-decoration: none; }
 .fac-links a:hover { text-decoration: underline; }
 .legend .fac-zoom { color: var(--ink-3); }
+/* a looked-up address or the device's location: the units it lies in, one line per layer */
+.addr { display: grid; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.addr h3 { font-size: 17px; }
+.addr-list { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; align-items: start; }
+.addr-list dt { color: var(--ink-3); font-size: 12.5px; padding-top: 1.5px; }
+.addr-list dd { margin: 0; min-width: 0; }
+.addr-list button { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.addr-list button:hover, .addr-list button:focus-visible { text-decoration: underline; outline: none; }
+.addr-list .cur button { font-weight: 600; }
+.results .r-note { padding: 8px 12px 4px; color: var(--ink-3); }
+.toast { position: absolute; left: 62px; top: 14px; max-width: min(320px, calc(100% - 76px)); z-index: 6; padding: 7px 10px;
+  border-radius: 6px; background: var(--ink); color: var(--panel); font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.tools button svg { display: block; margin: auto; }
+.tools button[aria-busy="true"] svg { opacity: .35; }
 .unit.shaded { fill-opacity: .82; }
 .unit.shaded:hover { fill-opacity: .6; }
 .unit { fill: transparent; stroke: var(--line); stroke-width: .6; vector-effect: non-scaling-stroke; cursor: pointer; }
@@ -275,11 +289,11 @@ img { max-width: 100%; }
   <aside class="side">
     <header class="top">
       <h1>Taipei Boundaries</h1>
-      <p>Electoral, school, police, court and statistical boundaries in Taipei, from official data. Pick a layer and click an area to see what overlaps it.</p>
+      <p>Electoral, school, police, court and statistical boundaries in Taipei, from official data. Pick a layer and click an area, or look up an address, to see what overlaps it.</p>
     </header>
     <div class="search">
-      <label for="q" class="section-label" style="display:block;margin-bottom:6px">Find a place or unit</label>
-      <input id="q" type="search" autocomplete="off" placeholder="e.g. Dazhi, 大直, polling station 0917" aria-controls="results">
+      <label for="q" class="section-label" style="display:block;margin-bottom:6px">Find an address, place or unit</label>
+      <input id="q" type="search" autocomplete="off" placeholder="e.g. 羅斯福路四段1號, Dazhi, 大直" aria-controls="results">
       <div class="results" id="results" hidden></div>
     </div>
     <div class="layer-select">
@@ -295,7 +309,7 @@ img { max-width: 100%; }
           <li><a href="downloads/taipei_boundaries_geojson.zip" download>All layers as GeoJSON</a><span class="what">20 files, zipped, 4.2 MB</span></li>
           <li><a href="downloads/taipei_boundaries_gpkg.zip" download>All layers as a GeoPackage</a><span class="what">one file, zipped, 7.3 MB</span></li>
           <li><a href="downloads/taipei_boundaries_tables.zip" download>Village and lin crosswalks, overlaps, facility locations</a><span class="what">4 CSV files, zipped, 574 KB</span></li>
-          <li><a href="downloads/README_zh.md" download>Methods, sources and known issues</a><span class="what">in Chinese, 29 KB</span></li>
+          <li><a href="downloads/README_zh.md" download>Methods, sources and known issues</a><span class="what">in Chinese, 31 KB</span></li>
         </ul>
       </details>
       <details class="about" id="about">
@@ -305,6 +319,7 @@ img { max-width: 100%; }
         <p>English names are official where one exists. Labels like “Polling station 0917” are descriptions.</p>
         <p>Population is household registration by village, September 2026, shown only for layers made of whole villages.</p>
         <p>Squares mark district offices, police, health centers, schools, fire stations, evacuation shelters and polling places. They sit at the official street address, placed with the Civil Affairs Department’s house-number coordinates; fire stations use the Fire Department’s own coordinates.</p>
+        <p>Addresses come from the Civil Affairs Department’s house-number data and are searched in Chinese. An address takes its village and lin from that data, so its polling station and school zones follow the official lin tables. Your location, if you share it, stays in your browser.</p>
         <p>Base maps: Simple draws roads wider than 8 m (Public Works Department), river zones (urban-plan zoning map) and MRT stations (Taipei Rapid Transit Corporation). The street map and aerial photo (2025) are loaded live from the Taipei City Urban Development Department.</p>
         <p>Methods, sources and known issues: <a href="downloads/README_zh.md">README</a> (in Chinese).</p>
         <p>Inspired by <a href="https://boundaries.beta.nyc/" target="_blank" rel="noopener">NYC Boundaries</a> by BetaNYC.</p>
@@ -342,7 +357,9 @@ img { max-width: 100%; }
       <button id="zin" aria-label="Zoom in">+</button>
       <button id="zout" aria-label="Zoom out">−</button>
       <button id="zreset" aria-label="Show the whole city" style="font-size:13px">⤢</button>
+      <button id="locate" aria-label="Show my location" title="Show my location"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"></circle><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"></circle><path d="M8 .8v2.4M8 12.8v2.4M.8 8h2.4M12.8 8h2.4"></path></svg></button>
     </div>
+    <div class="toast" id="toast" role="status" hidden></div>
     <div class="legend" id="legend"></div>
     <div class="basemaps" id="basemaps"></div>
     <div class="tip" id="tip" hidden></div>
@@ -442,7 +459,8 @@ const hasCJK = s => /[㐀-鿿]/.test(s || "");
 let KEYS = {};  // per layer: the token that names each unit in the address
 let U, OV, FEAT = {}, BOX = {}, LAYERS, proj, path, zoom, svg, gZoom, transform = d3.zoomIdentity;
 let BASEMAP = {}, METRO = [], POP_MONTH = "", CITY_POP = 0;
-const state = { layer: "district", sel: null, point: null, shade: false, base: "simple" };
+const state = { layer: "district", sel: null, point: null, addr: null, shade: false, base: "simple" };
+const DATA = "data/";  // where the data files are; web/site.py sets "data/"
 const BREAKS = [5000, 15000, 25000, 40000];  // residents per km², fixed so layers can be compared
 const NOPOP = {
   lin: "No population: these zones are built from lin, and lin population is not published.",
@@ -552,7 +570,7 @@ function drawLayer() {
     .on("click", (ev, f) => {
       const [px, py] = d3.pointer(ev, svg.node());
       const [x, y] = proj.invert(transform.invert([px, py]));
-      state.point = [x, y];
+      state.point = [x, y]; state.addr = null;
       select(l, f.properties.i, false);
     });
   // context: district lines, except on layers whose own lines already include them
@@ -822,7 +840,7 @@ function placeFacilities() {
       ev.stopPropagation();
       const [x, y] = F.pts[d.k];
       const i = unitAt(l, x, y);
-      if (i >= 0) { state.point = [x, y]; select(l, i, false); }
+      if (i >= 0) { state.point = [x, y]; state.addr = null; select(l, i, false); }
     })
     .order();
   g.selectAll("text").data(pts.filter(d => d.on), d => d.k).join("text")
@@ -894,39 +912,51 @@ function facHint(l) {
   if (l === "polling_2026") return "A square marks the polling place of the selected area, at its official street address; zoom in to see all of them.";
   return `Squares mark each ${FAC_KIND[l][0].toLowerCase()}, at its official street address.`;
 }
+function renderPanel() { if (state.sel) renderUnit(); else renderLayerInfo(); }
 function renderLayerInfo() {
   const l = state.layer, m = LAYER[l];
-  $("panel").innerHTML = `
+  $("panel").innerHTML = (state.addr ? addrHTML() + `<p class="hint">Not inside any unit of this layer.</p>` : "") + `
     <div><div class="kicker">${esc(m.group)}</div><h3>${esc(m.title)}</h3></div>
     <p class="num">${countText(l)}</p>
     <p>${esc(m.about)}</p>
     <p class="hint">${hasPop(l) ? `Population: ${esc(POP_MONTH)}, summed from villages. Shade by density in the legend.` : esc(NOPOP[NOPOP_LAYER[l]] || "")}</p>
     ${FAC[l] ? `<p class="hint">${facHint(l)}</p>` : ""}
-    <p class="hint">Click an area on the map, or search for a name above.</p>
+    <p class="hint">Click an area on the map, or search above for an address or a name.</p>
     ${DOWNLOADS && DOWNLOADS[l] ? `<p class="hint"><a href="${esc(DOWNLOADS[l][0])}" download>Download this layer</a> (GeoJSON, zipped, ${esc(DOWNLOADS[l][1])})</p>` : ""}
     <div>${sourcesHTML([...m.src, ...(hasPop(l) ? ["pop"] : []), ...(FAC_SRC[l] || [])])}</div>`;
+  bindAddr();
 }
 function renderUnit() {
   const { layer: l, i } = state.sel, u = U[l][i], m = LAYER[l];
   const showZh = u.z && u.z !== u.n;
   const attrs = (u.a || []).map(([k, v]) => `<dt>${esc(k)}</dt><dd${hasCJK(v) ? ' class="zh"' : ""}>${esc(v)}</dd>`).join("");
-  let html = `
+  let html = (state.addr ? addrHTML() : "") + `
     <div class="card-head"><div>
       <div class="kicker">${esc(m.title)}</div>
       <h3>${nameHTML(u)}</h3>
       ${showZh ? `<div class="zhname">${esc(u.z)}</div>` : ""}
       ${u.s ? `<div class="sub${hasCJK(u.s) ? " zh" : ""}">${esc(u.s)}</div>` : ""}
-    </div><button class="x" id="x" aria-label="Close and show the layer description">×</button></div>
+    </div>${state.addr ? "" : `<button class="x" id="x" aria-label="Close and show the layer description">×</button>`}</div>
     ${u.x ? `<div class="note">${esc(u.x)}</div>` : ""}
     ${popHTML(l, u)}
     <dl class="attrs num">${attrs}<dt>Area</dt><dd>${fmtArea(u.km2)}</dd></dl>
     ${facHTML(l, i)}`;
-  html += renderOverlaps(l, i);
-  html += `<button class="clear" id="clear">Clear selection</button>`;
+  html += `<div id="ovbox">${renderOverlaps(l, i)}</div>`;
+  html += `<button class="clear" id="clear">${state.addr ? `Clear the ${placeNoun()}` : "Clear selection"}</button>`;
   $("panel").innerHTML = html;
-  const clear = () => { state.sel = null; state.point = null; drawSelection(); renderLayerInfo(); };
-  $("clear").onclick = clear;
-  $("x").onclick = clear;
+  $("clear").onclick = clearAll;
+  if ($("x")) $("x").onclick = clearAll;
+  bindAddr();
+  bindOverlaps();
+}
+function clearAll() { state.sel = null; state.point = null; state.addr = null; drawSelection(); renderLayerInfo(); }
+// the overlap table is the largest file and is needed only once something is selected, so it loads after the map is up
+function refreshOverlaps() {
+  if (!state.sel || !$("ovbox")) return;
+  $("ovbox").innerHTML = renderOverlaps(state.sel.layer, state.sel.i);
+  bindOverlaps();
+}
+function bindOverlaps() {
   $("panel").querySelectorAll(".ov-item").forEach(b => {
     b.addEventListener("mouseenter", () => peek(b.dataset.l, +b.dataset.i));
     b.addEventListener("mouseleave", () => peek(null));
@@ -950,9 +980,11 @@ function popHTML(l, u) {
   return NOPOP_LAYER[l] && !isNull(l, state.sel.i) ? `<p class="hint">${esc(NOPOP[NOPOP_LAYER[l]])}</p>` : "";
 }
 function renderOverlaps(l, i) {
+  if (OV === undefined) return `<p class="hint">Loading the overlaps with other layers…</p>`;
+  if (!OV) return `<p class="hint">The overlaps with other layers could not be loaded. Reload the page to try again.</p>`;
   const rows = OV[l][i] || [];
   const here = {};
-  if (state.point) for (const L of ORDER) if (L !== l) here[L] = unitAt(L, state.point[0], state.point[1]);
+  if (state.point) for (const L of ORDER) if (L !== l) here[L] = state.addr ? placeUnit(L) : unitAt(L, state.point[0], state.point[1]);
   const by = {};
   for (const [li, j, sSelf, sOther] of rows) (by[LAYERS[li]] ||= []).push({ j, sSelf, sOther });
   if (state.point) for (const L of ORDER) if (L !== l && here[L] >= 0 && !(by[L] || []).some(r => r.j === here[L])) (by[L] ||= []).push({ j: here[L], sSelf: null, sOther: null });
@@ -969,7 +1001,7 @@ function renderOverlaps(l, i) {
   }).join("");
   if (!blocks) return isNull(l, i) ? "" : `<p class="hint">No overlaps with other layers.</p>`;
   return `<div><div class="section-label" style="margin-bottom:6px">Overlaps with other layers</div>
-    <p class="hint" style="margin-bottom:10px">Share of the selected area in each unit.${state.point ? " ● = where you clicked." : ""}</p>
+    <p class="hint" style="margin-bottom:10px">Share of the selected area in each unit.${state.point ? ` ● = ${state.addr ? "the " + placeNoun() : "where you clicked"}.` : ""}</p>
     <div class="ov">${blocks}</div></div>`;
 }
 function peek(L, j) { d3.select("#peek").attr("d", L ? path(FEAT[L][j]) : null); }
@@ -977,13 +1009,15 @@ function peek(L, j) { d3.select("#peek").attr("d", L ? path(FEAT[L][j]) : null);
 // ---------- actions
 function setLayer(l, keepSel) {
   if (!LAYER[l]) return;
-  if (state.sel && state.sel.layer !== l) { state.sel = null; state.point = null; }  // a new layer starts with nothing selected
+  if (state.sel && state.sel.layer !== l && !state.addr) { state.sel = null; state.point = null; }  // a new layer starts with nothing selected
   state.layer = l;
+  if (state.addr) { const i = placeUnit(l); state.sel = i >= 0 ? { layer: l, i } : null; }  // ... unless an address is shown
   document.querySelectorAll(".layer-btn").forEach(b => b.setAttribute("aria-pressed", b.dataset.layer === l));
   $("layer-sel").value = l;
   drawLayer();
   drawSelection();
-  if (!state.sel) renderLayerInfo();
+  if (state.addr) renderPanel();
+  else if (!state.sel) renderLayerInfo();
 }
 function setShade(on) {
   state.shade = on;
@@ -1002,16 +1036,24 @@ function goTo(l, i) {
   state.point = pt;
   select(l, i, true);
 }
-function zoomToFeature(f) {
-  const [[x0, y0], [x1, y1]] = path.bounds(f);
+function visibleMap() {  // width and height of the map not covered by the panel
   const r = $("map").getBoundingClientRect();
   const pr = $("panel").getBoundingClientRect();
   const floating = getComputedStyle($("panel")).position === "absolute";
-  const w = floating ? Math.max(200, pr.left - r.left - 14) : r.width;  // visible map width left of the panel
-  const k = Math.max(1, Math.min(16, 0.55 / Math.max((x1 - x0) / w, (y1 - y0) / r.height)));
-  const t = d3.zoomIdentity.translate(w / 2, r.height / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
-  svg.transition().duration(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 600).call(zoom.transform, t);
+  return [floating ? Math.max(200, pr.left - r.left - 14) : r.width, r.height];  // visible map width left of the panel
 }
+function zoomToFeature(f) {
+  const [[x0, y0], [x1, y1]] = path.bounds(f);
+  const [w, h] = visibleMap();
+  const k = Math.max(1, Math.min(16, 0.55 / Math.max((x1 - x0) / w, (y1 - y0) / h)));
+  flyTo(d3.zoomIdentity.translate(w / 2, h / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2));
+}
+function zoomToPoint(x, y, mpp) {  // centre a TWD97 point at mpp metres per screen pixel
+  const [w, h] = visibleMap(), p = proj([x, y]);
+  const k = Math.max(1, Math.min(maxZoomK(), 1 / (proj.scale() * mpp)));
+  flyTo(d3.zoomIdentity.translate(w / 2, h / 2).scale(k).translate(-p[0], -p[1]));
+}
+function flyTo(t) { svg.transition().duration(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 600).call(zoom.transform, t); }
 
 // ---------- shareable address: #layer, #layer/unit, #layer/unit@x,y (x, y in TWD97 metres)
 // A unit is named by its official code where it has one (village, subdistrict, school codes), otherwise by its
@@ -1042,7 +1084,7 @@ function applyHash() {
   const l = m && LAYER[m[1]] ? m[1] : "district";
   let i = -1;
   if (m && LAYER[m[1]] && m[2]) { try { i = KEYS[l].indexOf(decodeURIComponent(m[2])); } catch (e) {} }
-  state.sel = state.point = null;
+  state.sel = state.point = state.addr = null;
   setLayer(l, false);
   if (i < 0) return;
   const pt = m[3] ? [+m[3], +m[4]] : null;
@@ -1055,27 +1097,189 @@ let INDEX = [];
 function buildIndex() {
   for (const l of ORDER) U[l].forEach((u, i) => {
     if (NULLS.has(u.n)) return;
-    INDEX.push({ l, i, t: [u.n, u.z, u.s, ...(u.a || []).map(a => a[1])].filter(Boolean).join(" ").toLowerCase() });
+    INDEX.push({ l, i, t: [u.n, u.z, u.s, ...(u.a || []).map(a => a[1])].filter(Boolean).join(" ").toLowerCase(), nm: [u.n, u.z].filter(Boolean).join(" ").toLowerCase() });
   });
 }
-function runSearch() {
-  const q = $("q").value.trim().toLowerCase(), box = $("results");
+let searchSeq = 0;
+async function runSearch() {
+  const raw = $("q").value.trim(), q = raw.toLowerCase(), box = $("results"), seq = ++searchSeq;
   if (!q) { box.hidden = true; return; }
   const words = q.split(/\s+/);
   const hits = INDEX.filter(e => words.every(w => e.t.includes(w))).slice(0, 40);
-  box.innerHTML = hits.length ? hits.map(h => {
+  const unitHTML = list => list.map(h => {
     const u = U[h.l][h.i];
     return `<button data-l="${h.l}" data-i="${h.i}"><span class="r-layer">${esc(LAYER[h.l].title)}</span><span>${nameHTML(u)}${u.z && u.z !== u.n ? ` <span class="zh" style="color:var(--ink-2)">${esc(u.z)}</span>` : ""}</span></button>`;
-  }).join("") : `<div class="empty">No match. Try an English or Chinese name.</div>`;
-  box.hidden = false;
+  }).join("");
+  // units whose name matches first, then streets, then units that match only in a detail (e.g. a polling station's address)
+  const named = hits.filter(h => words.every(w => h.nm.includes(w)));
+  const units = unitHTML(named), more = unitHTML(hits.filter(h => !named.includes(h)));
+  const show = (top, streets) => {
+    box.innerHTML = top + units + streets + more || `<div class="empty">No match. Try an English or Chinese name, or a street address in Chinese.</div>`;
+    box.hidden = false;
+  };
+  if (!hasCJK(raw)) return show("", "");  // addresses are searched in Chinese
+  show(units || more ? "" : `<div class="r-note">Looking up the address…</div>`, "");  // the units now, addresses when their data is in
+  let res;
+  try { res = await lookupAddress(raw); } catch (e) { res = { error: true }; }
+  if (seq !== searchSeq) return;  // the text has changed since
+  show(...addressResultsHTML(res));
+}
+
+// ---------- addresses: the Civil Affairs house-number data, one file per street, loaded when first needed
+let ADDR = null;  // promise of addr/index.json, with each street name normalised
+const STREETS = {};  // street index -> promise of its house numbers
+const VARIANT = { "台": "臺", "舘": "館", "褔": "福" };  // the same character written two ways
+const normAddr = s => [...String(s || "").normalize("NFKC").replace(/\s+/g, "")].map(c => VARIANT[c] || c).join("");
+const CN_DIGITS = "〇一二三四五六七八九";
+function cnNumber(t) {  // 九十七 -> 97
+  let total = 0, cur = 0;
+  for (const ch of t) {
+    if (ch === "十" || ch === "百") { total += (cur || 1) * (ch === "十" ? 10 : 100); cur = 0; }
+    else cur = ch === "零" ? 0 : CN_DIGITS.indexOf(ch);
+  }
+  return String(total + cur);
+}
+function getJSON(f) { return fetch(DATA + f).then(r => { if (!r.ok) throw new Error(f + " " + r.status); return r.json(); }); }
+function addrIndex() {
+  return ADDR ||= getJSON("addr/index.json").then(ix => { ix.norm = ix.streets.map(([n]) => normAddr(n)); return ix; })
+    .catch(e => { ADDR = null; throw e; });
+}
+function streetRows(k) {
+  return STREETS[k] ||= getJSON(`addr/s${k}.json`).then(rows => { rows.forEach(r => { r.key = normAddr(r[1]); }); return rows; })
+    .catch(e => { delete STREETS[k]; throw e; });
+}
+// "臺北市大安區羅斯福路4段1號3樓" -> district 大安區, street 羅斯福路四段, "1號"
+function parseAddress(ix, text) {
+  let s = String(text).normalize("NFKC").replace(/\s*(地下)?[\d〇一二三四五六七八九十]+樓.*$/, "");  // the floor
+  s = normAddr(s).replace(/^\d{3,6}/, "").replace(/^臺北[市巿]/, "");
+  let d = null;
+  const dm = /^.{1,2}區/.exec(s);
+  if (dm && ix.districts.includes(dm[0])) { d = ix.districts.indexOf(dm[0]); s = s.slice(dm[0].length); }
+  const vm = /^[一-鿿]{1,3}里/.exec(s);  // a village and a lin, as some addresses are written
+  if (vm && U.village.some(u => u.z === vm[0])) s = s.slice(vm[0].length);
+  s = s.replace(/^\d+鄰/, "").replace(/^(\D+?)(\d)段/, (m, a, n) => a + CN_DIGITS[+n] + "段");
+  let k = -1;
+  ix.norm.forEach((n, j) => {
+    if (s.startsWith(n) && (k < 0 || n.length > ix.norm[k].length) && (d == null || ix.streets[j][1].includes(d))) k = j;
+  });
+  if (k < 0) return { d, street: -1, text: s };
+  let rest = s.slice(ix.norm[k].length)
+    .replace(/(^|[巷弄])([〇零一二三四五六七八九十百]+)(?=[號巷弄])/g, (m, a, n) => a + cnNumber(n))
+    .replace(/(\d+)號之(\d+)/, "$1之$2號").replace(/(\d+)-(\d+)/, "$1之$2").replace(/號.*$/, "號");
+  if (/\d$/.test(rest)) rest += "號";
+  return { d, street: k, rest };
+}
+async function lookupAddress(text) {
+  const ix = await addrIndex(), p = parseAddress(ix, text);
+  if (p.street < 0) return { ix, p };
+  const rows = await streetRows(p.street);
+  const here = rows.filter(r => p.d == null || r[0] === p.d);
+  const hits = here.filter(r => r.key === p.rest);
+  let near = [];
+  const m = /^(.*?)(臨)?(\d+)(?:之\d+)?號$/.exec(p.rest);
+  if (!hits.length && m) {  // the closest numbers in the same lane or alley
+    near = here.map(r => [r, /^(.*?)(臨)?(\d+)(?:之\d+)?號$/.exec(r.key)]).filter(([, n]) => n && n[1] === m[1])
+      .sort((a, b) => Math.abs(a[1][3] - m[3]) - Math.abs(b[1][3] - m[3]) || a[0].key.localeCompare(b[0].key)).slice(0, 4).map(([r]) => r);
+  }
+  return { ix, p, hits, near };
+}
+function addrLabel(ix, k, r) { return `臺北市${ix.districts[r[0]]}${ix.streets[k][0]}${r[1]}`; }
+function addressResultsHTML(res) {  // -> [above the units, below the units]
+  if (res.error) return [`<div class="r-note">The address data could not be loaded.</div>`, ""];
+  const { ix, p } = res, btn = (k, r, tag) =>
+    `<button data-street-k="${k}" data-row="${esc(r[0] + "|" + r[1])}"><span class="r-layer">${tag}</span><span class="zh">${esc(addrLabel(ix, k, r))}</span></button>`;
+  if (p.street >= 0) {
+    const name = esc(ix.streets[p.street][0]);
+    if (res.hits.length) return [res.hits.map(r => btn(p.street, r, "Address")).join(""), ""];
+    if (!p.rest) return [`<div class="r-note">Add a house number to <span class="zh">${name}</span>.</div>`, ""];
+    return [`<div class="r-note">No <span class="zh">${name}${esc(p.rest)}</span> in the house-number data${p.d != null ? ` for <span class="zh">${esc(ix.districts[p.d])}</span>` : ""}.</div>`
+      + res.near.map(r => btn(p.street, r, "Nearby number")).join(""), ""];
+  }
+  if (p.text.length < 2) return ["", ""];
+  const order = n => [!n.startsWith(p.text), n.length, n.replace(/([一二三四五六七八九])段$/, (m, c) => CN_DIGITS.indexOf(c) + "段")];  // 一段 before 二段
+  const cmp = (x, y) => { const a = order(x[0]), b = order(y[0]); return a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0); };
+  const streets = ix.norm.map((n, j) => [n, j]).filter(([n, j]) => n.includes(p.text) && (p.d == null || ix.streets[j][1].includes(p.d))).sort(cmp).slice(0, 6);
+  return ["", streets.map(([, j]) => `<button data-street="${esc((p.d != null ? ix.districts[p.d] : "") + ix.streets[j][0])}"><span class="r-layer">Street in <span class="zh">${esc(ix.streets[j][1].map(d => ix.districts[d]).join("、"))}</span></span><span class="zh">${esc(ix.streets[j][0])}</span></button>`).join("")];
+}
+async function goToAddress(k, district, key) {
+  const ix = await addrIndex(), rows = await streetRows(k);
+  const r = rows.find(r => r[0] === district && r[1] === key);
+  if (!r) return;
+  const [, , x, y, v, lin, ...lu] = r, units = { village: v };
+  ix.villageLayers.forEach((l, j) => { if (ix.villageUnits[v][j] >= 0) units[l] = ix.villageUnits[v][j]; });
+  ix.rows.slice(6).forEach((l, j) => { if (lu[j] >= 0) units[l] = lu[j]; });
+  showPlace({ kind: "address", label: addrLabel(ix, k, r), x, y, v, lin, units });
+}
+// an address or the device's location: a pin, the unit it is in on every layer, kept when the layer changes
+function showPlace(a) {
+  state.addr = a;
+  state.point = [a.x, a.y];
+  const i = placeUnit(state.layer);
+  state.sel = i >= 0 ? { layer: state.layer, i } : null;
+  drawSelection();
+  renderPanel();
+  zoomToPoint(a.x, a.y, METRO_NAMES);
+}
+function placeUnit(l) {  // the unit of layer l that the address is in: from its village and lin where they decide it, else where its point falls
+  const a = state.addr;
+  return a.units && a.units[l] != null ? a.units[l] : unitAt(l, a.x, a.y);
+}
+const placeNoun = () => state.addr && state.addr.kind === "location" ? "location" : "address";
+function addrHTML() {
+  const a = state.addr, list = ORDER.map(L => [L, placeUnit(L)]).filter(([, j]) => j >= 0)
+    .map(([L, j]) => `<dt>${esc(LAYER[L].title)}</dt><dd${L === state.layer ? ' class="cur"' : ""}><button class="addr-go" data-l="${L}" data-i="${j}">${nameHTML(U[L][j])}</button></dd>`).join("");
+  let about;
+  if (a.kind === "address") {
+    const u = U.village[a.v], pv = unitAt("village", a.x, a.y);
+    about = `<p class="hint">The house-number data puts it in ${esc(u.n)}${u.z !== u.n ? ` (<span class="zh">${esc(u.z)}</span>)` : ""}${a.lin ? `, lin ${a.lin}` : ""}.</p>`
+      + (pv >= 0 && pv !== a.v ? `<div class="note">Its point on the map falls in ${esc(U.village[pv].n)}. The units below follow the house-number data.</div>` : "");
+  } else about = `<p class="hint">${a.acc >= 1 ? `Accurate to about ${fmtInt(Math.round(a.acc))} m, according to your device. ` : ""}Near a boundary, check the map.</p>`;
+  return `<div class="addr"><div class="card-head"><div><div class="kicker">${a.kind === "address" ? "Address" : "Location"}</div>`
+    + `<h3${a.kind === "address" ? ' class="zh"' : ""}>${esc(a.label)}</h3></div><button class="x" id="addr-x" aria-label="Clear the ${placeNoun()}">×</button></div>`
+    + `${about}<div class="section-label">In each layer</div><dl class="addr-list">${list}</dl></div>`;
+}
+function bindAddr() {
+  if ($("addr-x")) $("addr-x").onclick = clearAll;
+  $("panel").querySelectorAll(".addr-go").forEach(b => b.addEventListener("click", () => goTo(b.dataset.l, +b.dataset.i)));
+}
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 6000);
+}
+// WGS84 latitude and longitude (from the device) -> TWD97 TM2, EPSG:3826, the coordinates of every layer.
+// Transverse Mercator series on the GRS80 ellipsoid, central meridian 121°E, scale 0.9999, false easting 250,000 m
+// (Snyder 1987, Map Projections: A Working Manual, eq. 8-9 to 8-13). In Taipei it agrees with PROJ to within 1 mm (tested).
+function toTWD97(lat, lon) {
+  const a = 6378137, f = 1 / 298.257222101, k0 = 0.9999, e2 = f * (2 - f), ep2 = e2 / (1 - e2), rad = Math.PI / 180;
+  const p = lat * rad, s = Math.sin(p), c = Math.cos(p), t = Math.tan(p);
+  const N = a / Math.sqrt(1 - e2 * s * s), T = t * t, C = ep2 * c * c, A = (lon - 121) * rad * c;
+  const M = a * ((1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * p - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
+    + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p) - (35 * e2 ** 3 / 3072) * Math.sin(6 * p));
+  return [250000 + k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120),
+    k0 * (M + N * t * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720))];
+}
+function locate() {
+  const b = $("locate");
+  if (!navigator.geolocation) return toast("This browser cannot share its location.");
+  b.setAttribute("aria-busy", "true");
+  navigator.geolocation.getCurrentPosition(pos => {
+    b.removeAttribute("aria-busy");
+    const [x, y] = toTWD97(pos.coords.latitude, pos.coords.longitude);
+    if (unitAt("district", x, y) < 0) return toast("Your location is outside Taipei City.");
+    showPlace({ kind: "location", label: "Your location", x, y, acc: pos.coords.accuracy, units: null });
+  }, err => {
+    b.removeAttribute("aria-busy");
+    toast(err.code === 1 ? "Location access was not allowed." : "Your location could not be found.");
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 
 // ---------- start
 async function start() {
-  const [aligned, city, units, ov, roads, water, metro, fac, ...off] = await Promise.all(
-    ["aligned.topo.json", "city.topo.json", "units.json", "overlaps.json", "roads.topo.json", "water.topo.json", "metro.json", "facilities.json", ...OFFICIAL.map(l => `${l}.topo.json`)]
-      .map(f => fetch("data/" + f).then(r => { if (!r.ok) throw new Error(f + " " + r.status); return r.json(); })));
-  U = units.units; LAYERS = units.layers; OV = ov; POP_MONTH = units.popMonth; CITY_POP = units.cityPop;
+  const [aligned, city, units, roads, water, metro, fac, ...off] = await Promise.all(
+    ["aligned.topo.json", "city.topo.json", "units.json", "roads.topo.json", "water.topo.json", "metro.json", "facilities.json", ...OFFICIAL.map(l => `${l}.topo.json`)]
+      .map(getJSON));
+  U = units.units; LAYERS = units.layers; POP_MONTH = units.popMonth; CITY_POP = units.cityPop;
   BASEMAP.roads = topojson.feature(roads, roads.objects.roads);
   BASEMAP.water = topojson.feature(water, water.objects.water);
   METRO = metro;
@@ -1127,16 +1331,28 @@ async function start() {
   applyHash();
   window.addEventListener("hashchange", applyHash);
   $("loading").hidden = true;
+  getJSON("overlaps.json").then(j => { OV = j; }, () => { OV = false; }).then(refreshOverlaps);
+  $("locate").onclick = locate;
 
   let rt;
   new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { fit(); zoom.scaleExtent([1, maxZoomK()]); drawLayer(); drawSelection(); updateTiles(true); }, 120); }).observe($("map"));
 
   $("q").addEventListener("input", runSearch);
+  $("q").addEventListener("focus", () => addrIndex().catch(() => {}), { once: true });  // the street list, before the first address is typed
   $("q").addEventListener("keydown", e => { if (e.key === "Escape") { $("q").value = ""; runSearch(); } if (e.key === "Enter") { const b = $("results").querySelector("button"); if (b) b.click(); } });
   $("results").addEventListener("click", e => {
+    const st = e.target.closest("button[data-street]");
+    if (st) { $("q").value = st.dataset.street; $("q").focus(); runSearch(); return; }  // a street: now add the number
+    const ad = e.target.closest("button[data-street-k]");
+    if (ad) {
+      $("results").hidden = true; $("q").value = "";
+      const [d, key] = ad.dataset.row.split("|");
+      goToAddress(+ad.dataset.streetK, +d, key);
+      return;
+    }
     const b = e.target.closest("button[data-l]"); if (!b) return;
     $("results").hidden = true; $("q").value = "";
-    state.point = null;
+    state.point = null; state.addr = null;
     goTo(b.dataset.l, +b.dataset.i);
   });
   document.addEventListener("click", e => { if (!e.target.closest(".search")) $("results").hidden = true; });
