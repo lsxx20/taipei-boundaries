@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="臺北市的選區、學區、警察、法院和統計區界線，全部來自官方資料。">
+<meta property="og:title" content="臺北市邊界圖層">
+<meta property="og:description" content="臺北市的選區、學區、警察、法院和統計區界線，全部來自官方資料。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://sixianli.com/taipei-boundaries/zh/">
+<meta property="og:image" content="https://sixianli.com/taipei-boundaries/zh/og.png">
+<meta property="og:locale" content="zh_TW">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2316191d'/%3E%3Cpath d='M7 9h8v7H7zM17 9h8v12h-8zM7 18h8v5H7z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="canonical" href="https://sixianli.com/taipei-boundaries/zh/">
+<link rel="alternate" hreflang="en" href="https://sixianli.com/taipei-boundaries/">
+<link rel="alternate" hreflang="zh-Hant" href="https://sixianli.com/taipei-boundaries/zh/">
+<title>臺北市邊界圖層</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen map app. Sidebar (layers, search, details) on the left, map on the right;
+   on phones the map sits on top and the panel scrolls below it. */
+:root {
+  --bg: #f6f7f8;          /* outside the city */
+  --panel: #ffffff;
+  --land: #ffffff;
+  --ink: #16191d;
+  --ink-2: #545b64;
+  --ink-3: #8a919a;
+  --rule: #dfe2e6;
+  --line: #2b3036;        /* unit boundaries of the active layer */
+  --line-faint: #c4c9cf;  /* district context lines */
+  --accent: #1d5fd1;      /* selection */
+  --accent-soft: rgba(29, 95, 209, 0.16);
+  --hover: rgba(22, 25, 29, 0.07);
+  --null: #9aa1a9;        /* hatching for areas the data cannot assign */
+  --water: #dfe8ee;       /* river zones */
+  --road: #eceef0;        /* roads wider than 8 m */
+  --metro: #b3b9c0;       /* MRT station dots */
+  --d1: #cde2fb; --d2: #86b6ef; --d3: #3987e5; --d4: #1c5cab; --d5: #0d366b;  /* density, low -> high */
+  --font: "Public Sans", "Noto Sans TC", "Helvetica Neue", Arial, sans-serif;
+  --zh: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1113; --panel: #16191c; --land: #1c2024; --ink: #eef0f2; --ink-2: #b3b9c0; --ink-3: #7e858d;
+    --rule: #2a2f35; --line: #d9dde2; --line-faint: #3a4047; --accent: #6ea2ff; --accent-soft: rgba(110, 162, 255, 0.22);
+    --hover: rgba(238, 240, 242, 0.08); --null: #6c737b; color-scheme: dark;
+    --water: #1d2a33; --road: #262b31; --metro: #555c64;
+    --d1: #104281; --d2: #1c5cab; --d3: #2a78d6; --d4: #6da7ec; --d5: #b7d3f6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1113; --panel: #16191c; --land: #1c2024; --ink: #eef0f2; --ink-2: #b3b9c0; --ink-3: #7e858d;
+  --rule: #2a2f35; --line: #d9dde2; --line-faint: #3a4047; --accent: #6ea2ff; --accent-soft: rgba(110, 162, 255, 0.22);
+  --hover: rgba(238, 240, 242, 0.08); --null: #6c737b; color-scheme: dark;
+  --water: #1d2a33; --road: #262b31; --metro: #555c64;
+  --d1: #104281; --d2: #1c5cab; --d3: #2a78d6; --d4: #6da7ec; --d5: #b7d3f6;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+.zh { font-family: var(--zh); }
+.num { font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-columns: minmax(280px, 310px) 1fr; height: 100%; }
+.side { background: var(--panel); border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.side-scroll { overflow-y: auto; flex: 1; min-height: 0; }
+.mapwrap { position: relative; min-width: 0; min-height: 0; }
+.mapbox { position: absolute; inset: 0; }
+.panel { position: absolute; top: 14px; right: 14px; width: min(370px, calc(100% - 28px)); max-height: calc(100% - 28px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.10); z-index: 5; }
+
+header.top { padding: 20px 20px 14px; border-bottom: 1px solid var(--rule); display: grid; gap: 4px; }
+header.top h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+header.top p { margin: 0; color: var(--ink-2); font-size: 13px; max-width: 46ch; }
+
+.search { padding: 12px 20px; border-bottom: 1px solid var(--rule); position: relative; }
+.search input { width: 100%; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.results { position: absolute; left: 20px; right: 20px; top: calc(100% - 6px); z-index: 20; background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 50vh; overflow-y: auto; }
+.results button { display: grid; width: 100%; text-align: left; padding: 8px 12px; border: 0; background: none; cursor: pointer; gap: 1px; }
+.results button:hover, .results button:focus-visible { background: var(--hover); outline: none; }
+.results .r-layer { font-size: 11.5px; color: var(--ink-3); }
+.results .empty { padding: 10px 12px; color: var(--ink-3); }
+
+.layers { padding: 8px 12px 14px; border-bottom: 1px solid var(--rule); }
+.layers h2, .section-label { font-size: 11.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.04em; text-transform: uppercase; margin: 0; }
+.group { margin-top: 10px; }
+.group .section-label { padding: 0 8px 3px; }
+.layer-btn { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: 100%; padding: 5px 8px; border: 0;
+  background: none; border-radius: 5px; cursor: pointer; text-align: left; }
+.layer-btn:hover { background: var(--hover); }
+.layer-btn:focus-visible { outline: 2px solid var(--accent); }
+.layer-btn[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.layer-btn[aria-pressed="true"] .count { color: var(--panel); opacity: .75; }
+.layer-btn .count { color: var(--ink-3); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.layer-select { display: none; }
+
+.panel { padding: 16px 18px 20px; display: grid; gap: 14px; align-content: start; }
+.panel .kicker { font-size: 12px; color: var(--ink-3); }
+.panel h3 { margin: 0; font-size: 19px; line-height: 1.25; font-weight: 700; text-wrap: balance; overflow-wrap: anywhere; }
+.panel .zhname { font-family: var(--zh); font-size: 15px; color: var(--ink-2); }
+.panel .sub { color: var(--ink-2); }
+.panel p { margin: 0; max-width: 62ch; }
+.attrs { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
+.attrs dt { color: var(--ink-3); white-space: nowrap; }
+.attrs dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.note { border-left: 3px solid var(--null); padding: 6px 10px; color: var(--ink-2); background: var(--bg); border-radius: 0 4px 4px 0; }
+.sources { display: grid; gap: 4px; padding: 0; margin: 0; list-style: none; }
+.sources a { color: var(--accent); text-decoration: none; }
+.sources a:hover { text-decoration: underline; }
+.hint { color: var(--ink-3); }
+.hint a { color: var(--accent); }
+.clear { justify-self: start; border: 1px solid var(--rule); background: none; border-radius: 5px; padding: 4px 10px; cursor: pointer; color: var(--ink-2); }
+.clear:hover { background: var(--hover); }
+.card-head { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.x { border: 0; background: none; cursor: pointer; color: var(--ink-3); font-size: 20px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+.x:hover { color: var(--ink); background: var(--hover); }
+.x:focus-visible { outline: 2px solid var(--accent); }
+
+.ov { display: grid; gap: 10px; }
+.ov-layer { display: grid; gap: 2px; }
+.ov-layer .ov-name { font-size: 12px; color: var(--ink-3); }
+.ov-item { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; width: 100%; padding: 4px 6px; margin: 0 -6px;
+  border: 0; background: none; border-radius: 4px; text-align: left; cursor: pointer; }
+.ov-item:hover, .ov-item:focus-visible { background: var(--hover); outline: none; }
+.ov-item .pct { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; }
+.ov-item .here { color: var(--accent); font-size: 11.5px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
+.ov-more { border: 0; background: none; color: var(--accent); padding: 2px 0; cursor: pointer; justify-self: start; font-size: 12.5px; }
+
+details.about { padding: 14px 20px 22px; border-top: 1px solid var(--rule); color: var(--ink-2); }
+details.about summary { cursor: pointer; color: var(--ink); font-weight: 600; }
+details.about p { margin: 10px 0 0; max-width: 62ch; }
+details.about a { color: var(--accent); }
+
+svg.map { display: block; width: 100%; height: 100%; background: var(--bg); touch-action: none; }
+/* base map tiles: an HTML layer under the SVG, so the browser can move and scale the images cheaply */
+svg.map { position: relative; }
+.tiles { position: absolute; left: 0; top: 0; width: 100%; overflow: hidden; pointer-events: none; z-index: 0; }  /* own stacking context: tiles stay under the map, buttons and legend */
+.tiles img { position: absolute; max-width: none; user-select: none; -webkit-user-drag: none; }
+.tiles.emap, .bm-thumb.emap { opacity: .5; }  /* the street map keeps its colours, faded so the boundaries stay on top */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.tiles, .bm-thumb).emap { filter: invert(1) hue-rotate(180deg); opacity: .45; } }
+:root[data-theme="dark"] :is(.tiles, .bm-thumb).emap { filter: invert(1) hue-rotate(180deg); opacity: .45; }
+.base-emap { background: var(--land); }
+.has-tiles svg.map { background: transparent; }
+.has-tiles .land { fill: none; }
+/* the city's tiles carry neighbouring areas too (the aerial photo fills them with black): cover everything outside the city */
+.outside { display: none; }
+.has-tiles .outside { display: inline; fill: var(--bg); fill-rule: evenodd; pointer-events: none; }
+.has-tiles .water, .has-tiles .roads { display: none; }
+.base-emap .unit { stroke: var(--ink); stroke-width: 1.1; }
+.base-emap .unit.sparse { stroke-width: 1.6; }
+.base-aerial .unit { stroke: #fff; stroke-width: 1.2; }
+.base-aerial .unit.sparse { stroke-width: 1.8; }
+.base-aerial .city-edge { stroke: #fff; }
+.base-aerial .ctx { stroke: rgba(255, 255, 255, .6); }
+/* base map switch, as in Google Maps: a thumbnail button that opens a row of thumbnails, one per base map */
+.basemaps { position: absolute; left: 14px; bottom: 14px; z-index: 3; display: flex; align-items: flex-end; gap: 8px; }
+.bm-toggle { position: relative; width: 64px; height: 64px; padding: 0; border: 2px solid #fff; border-radius: 8px; overflow: hidden;
+  background: var(--land); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); cursor: pointer; }
+.bm-toggle:focus-visible, .bm-menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bm-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bm-label { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; align-items: center; gap: 3px;
+  padding: 14px 0 4px; color: #fff; font-size: 11px; font-weight: 600; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .6)); }
+.bm-menu { display: flex; gap: 8px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, .15); }
+.bm-menu[hidden] { display: none; }
+.bm-menu button { display: grid; justify-items: center; gap: 3px; min-width: 56px; white-space: nowrap; padding: 0; border: 0; background: none; color: var(--ink-2); font-size: 11px; cursor: pointer; }
+.bm-menu .bm-thumb { width: 52px; height: 52px; border: 2px solid var(--rule); border-radius: 6px; background: var(--land); }
+.bm-menu button:hover .bm-thumb { border-color: var(--ink-3); }
+.bm-menu button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
+.bm-menu button[aria-pressed="true"] .bm-thumb { border-color: var(--ink); }
+.legend .attrib { color: var(--ink-3); font-size: 11px; display: block; }
+.legend .attrib a { color: inherit; }
+.land { fill: var(--land); }
+.city-edge { fill: none; stroke: var(--ink-3); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.ctx { fill: none; stroke: var(--line-faint); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
+.water { fill: var(--water); pointer-events: none; }
+.roads { fill: var(--road); pointer-events: none; }
+.metro { fill: var(--metro); pointer-events: none; }
+.has-tiles .metro { stroke: var(--panel); stroke-width: 1; }
+.metro-lbl { font-size: 10.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--land); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; font-family: var(--zh); }
+.fac { fill: var(--ink); stroke: var(--panel); stroke-width: 1.5; cursor: pointer; }
+.fac.on { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.fac-lbl { font-size: 11.5px; font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--land); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; font-family: var(--zh); }
+.fac-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fac-list li { display: grid; gap: 1px; }
+.fac-list .fac-addr { color: var(--ink-3); font-size: 12.5px; }
+.fac-list .fac-note { color: var(--ink-2); font-size: 12.5px; }
+.fac-wide summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
+.fac-wide .fac-list { margin-top: 6px; }
+.fac-links a { color: var(--accent); text-decoration: none; }
+.fac-links a:hover { text-decoration: underline; }
+.legend .fac-zoom { color: var(--ink-3); }
+/* one page per language: static text is written in both, and the page's language hides the other */
+html[lang^="zh"] .only-en, html:not([lang^="zh"]) .only-zh { display: none !important; }
+header.top { position: relative; }
+.lang { position: absolute; top: 24px; right: 20px; font-size: 13px; color: var(--accent); text-decoration: none; }
+.lang:hover { text-decoration: underline; }
+/* a looked-up address or the device's location: the units it lies in, one line per layer */
+.addr { display: grid; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.addr h3 { font-size: 17px; }
+.addr-list { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; align-items: start; }
+.addr-list dt { color: var(--ink-3); font-size: 12.5px; padding-top: 1.5px; }
+.addr-list dd { margin: 0; min-width: 0; }
+.addr-list button { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.addr-list button:hover, .addr-list button:focus-visible { text-decoration: underline; outline: none; }
+.addr-list .cur button { font-weight: 600; }
+.results .r-note { padding: 8px 12px 4px; color: var(--ink-3); }
+.toast { position: absolute; left: 62px; top: 14px; max-width: min(320px, calc(100% - 76px)); z-index: 6; padding: 7px 10px;
+  border-radius: 6px; background: var(--ink); color: var(--panel); font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.tools button svg { display: block; margin: auto; }
+.tools button[aria-busy="true"] svg { opacity: .35; }
+.unit.shaded { fill-opacity: .82; }
+.unit.shaded:hover { fill-opacity: .6; }
+.unit { fill: transparent; stroke: var(--line); stroke-width: .6; vector-effect: non-scaling-stroke; cursor: pointer; }
+.unit.sparse { stroke-width: 1; }
+.unit.patch { fill: var(--line); fill-opacity: .1; stroke-width: 1; }
+.unit:hover { fill: var(--hover); }
+.unit.patch:hover { fill-opacity: .25; }
+.unit.null { fill: url(#hatch); stroke: var(--null); }
+.sel { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.peek { fill: none; stroke: var(--ink); stroke-width: 2.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.pin { fill: var(--accent); stroke: var(--panel); stroke-width: 2; pointer-events: none; }
+.lbl { font-size: 12px; font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--land); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; text-anchor: middle; dominant-baseline: middle; }
+
+.tip { position: absolute; pointer-events: none; z-index: 10; background: var(--ink); color: var(--panel); padding: 6px 9px; border-radius: 5px;
+  font-size: 12.5px; max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.tip .t-sub { opacity: .75; font-size: 11.5px; }
+.tools { position: absolute; left: 14px; top: 14px; display: grid; gap: 6px; }
+.tools button { width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--rule); background: var(--panel); cursor: pointer; font-size: 18px; line-height: 1; }
+.tools button:hover { background: var(--bg); }
+.tools button:focus-visible { outline: 2px solid var(--accent); }
+.legend { position: absolute; left: 88px; bottom: 14px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px;
+  display: grid; gap: 5px; font-size: 12px; color: var(--ink-2); max-width: calc(100% - 102px); }
+.legend .row { display: flex; gap: 8px; align-items: center; }
+.legend label.row { cursor: pointer; color: var(--ink); }
+.legend .metro-key { display: inline-flex; gap: 8px; align-items: center; }
+.legend .metro-key[hidden] { display: none; }
+.legend .scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin-top: 2px; }
+.legend .scale span { height: 8px; border-radius: 1px; }
+.legend .ticks { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.legend .ticks span:not(:first-child) { margin-left: -1ch; }
+.pop { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 2px 22px; }
+.pop .v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pop .k { font-size: 11.5px; color: var(--ink-3); }
+.legend svg { flex: none; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); }
+
+@media (max-width: 820px) {
+  html, body { height: auto; }
+  .app { display: flex; flex-direction: column; height: auto; }
+  .side { display: contents; }
+  header.top { order: 1; } .search { order: 2; } .layer-select { order: 3; }
+  .mapwrap { order: 4; }
+  header.top, .search, .layer-select, .side-scroll { background: var(--panel); }
+  .mapbox { position: relative; }
+  svg.map { height: 62vh; min-height: 340px; }
+  .legend { position: static; max-width: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: 10px 16px; }
+  .basemaps { bottom: calc(100% - max(62vh, 340px) + 12px); }  /* 12 px above the map's bottom edge (the legend is below the map), so the menu opens upwards */
+  .bm-toggle { width: 56px; height: 56px; }
+  .panel { position: static; width: auto; max-height: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; box-shadow: none; }
+  .side-scroll { overflow: visible; }
+  .layers { display: none; }
+  .layer-select { display: block; padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+  .layer-select select { width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+  header.top, .search, .panel, details.about { padding-left: 16px; padding-right: 16px; }
+  .lang { right: 16px; }
+  .side-scroll { order: 5; }
+  .results { left: 16px; right: 16px; }
+  .legend { font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<style>
+/* what the artifact host used to add */
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.downloads ul { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.downloads li { display: grid; gap: 1px; }
+.downloads .what { color: var(--ink-3); font-size: 12.5px; }
+.credit { padding: 14px 20px 26px; color: var(--ink-3); font-size: 12.5px; border-top: 1px solid var(--rule); }
+.credit a, .downloads a { color: var(--accent); }
+@media (max-width: 820px) { .credit { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <aside class="side">
+    <header class="top">
+      <h1><span class="only-en">Taipei Boundaries</span><span class="only-zh">臺北市邊界圖層</span></h1>
+      <a class="lang only-en" href="zh/" hreflang="zh-Hant" lang="zh-Hant">中文</a><a class="lang only-zh" href="../" hreflang="en" lang="en">English</a>
+      <p class="only-en">Electoral, school, police, court and statistical boundaries in Taipei, from official data. Pick a layer and click an area, or look up an address, to see what overlaps it.</p>
+      <p class="only-zh">臺北市的選區、學區、警察、法院和統計區界線，全部來自官方資料。選一個圖層，點地圖上的區域或查詢地址，就能看到它和哪些單位重疊。</p>
+    </header>
+    <div class="search">
+      <label for="q" class="section-label" style="display:block;margin-bottom:6px"><span class="only-en">Find an address, place or unit</span><span class="only-zh">查詢地址、地名或單位</span></label>
+      <input id="q" type="search" autocomplete="off" placeholder="e.g. 羅斯福路四段1號, Dazhi, 大直" data-zh-placeholder="例如 羅斯福路四段1號、大直" aria-controls="results">
+      <div class="results" id="results" hidden></div>
+    </div>
+    <div class="layer-select">
+      <label for="layer-sel" class="section-label" style="display:block;margin-bottom:6px"><span class="only-en">Layer</span><span class="only-zh">圖層</span></label>
+      <select id="layer-sel"></select>
+    </div>
+    <div class="side-scroll">
+      <nav class="layers" id="layers" aria-label="Layers" data-zh-aria-label="圖層"></nav>
+      <details class="about downloads" id="downloads">
+        <summary>下載資料</summary>
+        <p>原始精度的資料。GeoPackage 為 TWD97（EPSG:3826），GeoJSON 為 WGS84。</p>
+        <ul>
+          <li><a href="../downloads/taipei_boundaries_geojson.zip" download>所有圖層，GeoJSON</a><span class="what">20 個檔案，壓縮檔，4.2 MB</span></li>
+          <li><a href="../downloads/taipei_boundaries_gpkg.zip" download>所有圖層，GeoPackage</a><span class="what">一個檔案，壓縮檔，7.3 MB</span></li>
+          <li><a href="../downloads/taipei_boundaries_tables.zip" download>里、鄰對照表，重疊表，設施位置</a><span class="what">4 個 CSV 檔，壓縮檔，574 KB</span></li>
+          <li><a href="../downloads/README_zh.md" download>做法、來源和已知問題</a><span class="what">說明文件，31 KB</span></li>
+        </ul>
+      </details>
+      <details class="about" id="about">
+        <summary><span class="only-en">About this map</span><span class="only-zh">關於這張地圖</span></summary>
+        <p class="only-zh">所有圖層都來自官方資料。由里或鄰組成的圖層共用同一套界線。畫斜線的區域是官方資料沒有分配給任何單位的土地。</p>
+        <p class="only-zh">網頁上的形狀經過簡化：每條界線 99% 的長度離官方界線不到 1 公尺。重疊比例用原始精度的資料計算。</p>
+        <p class="only-zh">人口是各里的戶籍登記人口（2026 年 9 月），只在由完整的里組成的圖層顯示。</p>
+        <p class="only-zh">方塊標出區公所、警察分局和派出所、健康服務中心、學校、消防分隊、避難收容處所和投開票地點，位置是官方地址對到民政局門牌坐標的地方；消防分隊用消防局自己公布的坐標。</p>
+        <p class="only-zh">地址查詢用民政局的門牌資料。地址所屬的里和鄰照門牌資料，所以投開票所和學區依官方的鄰對照表。如果你分享自己的位置，位置只在你的瀏覽器裡計算，不會送出。</p>
+        <p class="only-zh">底圖：「簡易」畫出寬度超過 8 公尺的道路（工務局）、河川區（都市計畫使用分區圖）和捷運站（臺北捷運公司）。電子地圖和航測影像（2025）即時從臺北市政府都市發展局載入。</p>
+        <p class="only-zh">做法、來源和已知問題：<a href="../downloads/README_zh.md">README</a>。</p>
+        <p class="only-zh">靈感來自 BetaNYC 的 <a href="https://boundaries.beta.nyc/" target="_blank" rel="noopener">NYC Boundaries</a>。</p>
+        <p class="only-en">All layers come from official data. Layers built from villages (里) or lin (鄰) share the same edges. Hatched areas are land the official data does not assign to any unit.</p>
+        <p class="only-en">Shapes are simplified for the web: 99% of every boundary stays within 1 m of the official line. Overlap percentages use the full-resolution data.</p>
+        <p class="only-en">English names are official where one exists. Labels like “Polling station 0917” are descriptions.</p>
+        <p class="only-en">Population is household registration by village, September 2026, shown only for layers made of whole villages.</p>
+        <p class="only-en">Squares mark district offices, police, health centers, schools, fire stations, evacuation shelters and polling places. They sit at the official street address, placed with the Civil Affairs Department’s house-number coordinates; fire stations use the Fire Department’s own coordinates.</p>
+        <p class="only-en">Addresses come from the Civil Affairs Department’s house-number data and are searched in Chinese. An address takes its village and lin from that data, so its polling station and school zones follow the official lin tables. Your location, if you share it, stays in your browser.</p>
+        <p class="only-en">Base maps: Simple draws roads wider than 8 m (Public Works Department), river zones (urban-plan zoning map) and MRT stations (Taipei Rapid Transit Corporation). The street map and aerial photo (2025) are loaded live from the Taipei City Urban Development Department.</p>
+        <p class="only-en">Inspired by <a href="https://boundaries.beta.nyc/" target="_blank" rel="noopener">NYC Boundaries</a> by BetaNYC.</p>
+      </details>
+      <p class="credit">李思憲（<a href="https://sixianli.com">Si-Xian Li</a>）整理，2026 年 10 月。</p>
+    </div>
+  </aside>
+  <main class="mapwrap" id="mapwrap">
+    <div class="mapbox" id="mapbox">
+    <div class="tiles" id="tiles" aria-hidden="true"></div>
+    <svg class="map" id="map" role="img" aria-label="Map of Taipei boundaries" data-zh-aria-label="臺北市邊界地圖">
+      <defs>
+        <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" style="fill: var(--land)"></rect>
+          <line x1="0" y1="0" x2="0" y2="6" style="stroke: var(--null); stroke-width: 2"></line>
+        </pattern>
+      </defs>
+      <g id="zoomg">
+        <path class="land" id="land"></path>
+        <path class="outside" id="outside"></path>
+        <path class="water" id="water"></path>
+        <path class="roads" id="roads"></path>
+        <g id="units"></g>
+        <path class="ctx" id="ctx"></path>
+        <path class="city-edge" id="edge"></path>
+        <path class="sel" id="sel"></path>
+        <path class="peek" id="peek"></path>
+      </g>
+      <g id="metro"></g>
+      <g id="fac"></g>
+      <g id="labels"></g>
+      <circle class="pin" id="pin" r="5" hidden></circle>
+    </svg>
+    <div class="tools">
+      <button id="zin" aria-label="Zoom in" data-zh-aria-label="放大">+</button>
+      <button id="zout" aria-label="Zoom out" data-zh-aria-label="縮小">−</button>
+      <button id="zreset" aria-label="Show the whole city" data-zh-aria-label="顯示整個臺北市" style="font-size:13px">⤢</button>
+      <button id="locate" aria-label="Show my location" title="Show my location" data-zh-aria-label="顯示我的位置" data-zh-title="顯示我的位置"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"></circle><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"></circle><path d="M8 .8v2.4M8 12.8v2.4M.8 8h2.4M12.8 8h2.4"></path></svg></button>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="legend" id="legend"></div>
+    <div class="basemaps" id="basemaps"></div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="loading" id="loading"><span class="only-en">Loading boundaries…</span><span class="only-zh">載入中…</span></div>
+    </div>
+    <section class="panel" id="panel" aria-live="polite"></section>
+  </main>
+</div>
+
+<script>
+// the Chinese page: attribute texts from their data-zh-* twins, before the map scripts load
+if (document.documentElement.lang.startsWith("zh"))
+  for (const a of ["placeholder", "aria-label", "title"]) document.querySelectorAll(`[data-zh-${a}]`).forEach(e => e.setAttribute(a, e.getAttribute(`data-zh-${a}`)));
+</script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+"use strict";
+const LANG = document.documentElement.lang.startsWith("zh") ? "zh" : "en";  // web/site.py makes one page per language
+const tr = (en, zh) => LANG === "zh" ? zh : en;
+const DT = "https://data.taipei/dataset/detail?id=";
+const SRC = {
+  village: [tr("Taipei village boundary map, Civil Affairs Dept. (2026-09-21)", "民政局 臺北市里界圖（2026-09-21）"), DT + "6b17b31d-4e16-495e-95b1-9fd1f47c80d8"],
+  lin: [tr("Taipei lin (neighbourhood) boundary map, Civil Affairs Dept. (2026-09-21)", "民政局 臺北市鄰界圖（2026-09-21）"), DT + "6d864ede-c482-4f33-bb89-5be19dc772e1"],
+  council: [tr("Central Election Commission notice 1153150253 (2026-08-20)", "中選會公告中選務字第 1153150253 號（2026-08-20）"), "https://web.cec.gov.tw/central/article/63625"],
+  cecdb: [tr("Central Election Commission election database", "中選會選舉資料庫"), "https://db.cec.gov.tw/"],
+  gazette: [tr("CEC notice 1043150299, Executive Yuan Gazette (2015)", "中選會公告中選務字第 1043150299 號（行政院公報，2015）"), "https://gazette.nat.gov.tw/EG_FileManager/eguploadpub/eg021215/ch02/type3/gov15/num2/Eg.pdf"],
+  polls: [tr("Taipei Election Commission: polling-station list (2026-08-31)", "臺北市選舉委員會 投開票所一覽表（2026-08-31）"), "https://web.cec.gov.tw/mect/article/64337"],
+  pollsfix: [tr("Taipei Election Commission: correction for Beitou, Xinyi, Zhongzheng (2026-10-07)", "臺北市選舉委員會 北投、信義、中正區投開票所更正（2026-10-07）"), "https://web.cec.gov.tw/mect/article/65041"],
+  school: [tr("Dept. of Education: school zones by village and lin, 2026–27", "教育局 臺北市中小學校學區（115 學年度）"), DT + "678c5215-f14a-47e3-92bd-da43f9d7c7a9"],
+  police: [tr("Taipei City Police Department precinct websites (checked 2026-10-08)", "臺北市政府警察局各分局網站（2026-10-08 查核）"), "https://english.police.gov.taipei/SiteMap.aspx"],
+  fire: [tr("Taipei City Fire Department: battalion duty pages", "消防局 各大隊業務職掌"), "https://www.119.gov.taipei/News.aspx?n=73D28CF5B82976A7&sms=0F752A4EDAEDD0DD"],
+  court: [tr("Judicial Yuan: court directory (updated 2026-08-25)", "司法院 各法院資訊（2026-08-25 更新）"), "https://www.judicial.gov.tw/tw/cp-1889-119101-8a7a0-1.html"],
+  sanitation: [tr("Dept. of Environmental Protection: district sanitation teams", "環境保護局 臺北市各區清潔隊"), DT + "d42f6798-9824-4abf-b552-51a9146f4906"],
+  health: [tr("Organizational Rules of Taipei City District Health Centers, Art. 2", "臺北市各區健康服務中心組織規程 第 2 條"), "https://laws.gov.taipei/law/LawSearch/LawPrint/FL031277?type=0"],
+  post: [tr("Chunghwa Post: 3-digit postal codes", "中華郵政 3 碼郵遞區號"), "https://www.post.gov.tw/post/internet/Download/index.jsp?ID=220306"],
+  postEn: [tr("Chunghwa Post: official English names of villages and districts", "中華郵政 村里文字巷中英對照（行政區、里的英文名稱）"), "https://www.post.gov.tw/post/internet/Postal/index.jsp?ID=207"],
+  sub: [tr("Taipei subdistrict map, Civil Affairs Dept. (2026-06-23)", "民政局 臺北市次分區界圖（2026-06-23）"), DT + "d8978c42-1343-4a86-82bc-27d949606e47"],
+  segis: [tr("Ministry of the Interior: level-2 statistical areas", "內政部 二級發布區圖"), "https://data.gov.tw/dataset/20598"],
+  zoning: [tr("Urban Development Dept.: urban-plan zoning map (file dated 2026-04-09)", "都市發展局 臺北市都市計畫使用分區圖（檔案日期 2026-04-09）"), DT + "3bab0a01-7936-4218-8cb5-f74dfcb43dda"],
+  pop: [tr("Ministry of the Interior: households and population by village (September 2026)", "內政部戶政司 村里戶數、人口（2026 年 9 月）"), "https://data.gov.tw/dataset/77132"],
+  popCheck: [tr("Civil Affairs Dept.: population by district (used as a cross-check)", "民政局 臺北市各行政區人口數及戶數（用來核對）"), DT + "6a1dbb4e-e99c-4e67-ab09-f6d83852dc99"],
+  addr: [tr("Civil Affairs Dept.: house-number coordinates (2026-10-02), used to place addresses", "民政局 臺北市門牌位置數值資料（2026-10-02），用來定位地址"), DT + "b7c8e724-1e98-45ee-a0bd-f3840623ed97"],
+  agencies: [tr("Personnel Dept.: addresses of city agencies and schools (2026-10-08)", "人事處 臺北市政府各機關學校聯絡資訊（2026-10-08）"), DT + "6b99dd93-9c63-43c9-96eb-0bfffce97217"],
+  policeUnits: [tr("Police Dept.: names and addresses of police units (2025-06-09)", "臺北市政府警察局名稱及地址（2025-06-09）"), DT + "6c41536a-3ce2-4102-bdfc-6b5f3d13ef91"],
+  healthList: [tr("Dept. of Health: district health centers (2026-09-21)", "衛生局 臺北市健康服務中心（2026-09-21）"), DT + "d4c6d4e0-c2b4-48e3-99b4-f670d820326b"],
+  fireList: [tr("Fire Dept.: fire station locations (2026-09-23)", "消防局 各分隊駐地位置（2026-09-23）"), DT + "a9fa2045-f7a6-4e16-ad26-577748064cdf"],
+  eduList: [tr("Dept. of Education: schools of all levels (2026-09-30)", "教育局 臺北市各級學校分布圖（2026-09-30）"), "https://data.gov.tw/dataset/121225"],
+  shelters: [tr("Dept. of Social Welfare: evacuation shelters and the villages they serve (2025 list)", "社會局 114年臺北市可供避難收容處所一覽表"), DT + "f327232d-9230-44d0-bf0c-df151802da32"],
+  evacMaps: [tr("District offices: evacuation map of each village, one dataset per district (2026)", "各區公所 各里簡易疏散避難地圖資訊（每區一個資料集，2026）"), "https://data.taipei/dataset?qs=%E5%90%84%E9%87%8C%E7%B0%A1%E6%98%93%E7%96%8F%E6%95%A3%E9%81%BF%E9%9B%A3%E5%9C%B0%E5%9C%96%E8%B3%87%E8%A8%8A"],
+};
+const enOf = u => u.en || u;  // a unit's English name and description, on either page
+const num = u => enOf(u).n.replace(/\D+/g, "");  // the number in "Council constituency 3", "Postal code 104"
+const LAYER_EN = {
+  district: { noun: "districts", title: "Districts", group: "Administrative", label: u => u.n.replace(" District", ""),
+    about: "Merged from the 456 villages.", src: ["village", "postEn"] },
+  village: { noun: "villages", title: "Villages", group: "Administrative",
+    about: "Each village (里) has an elected chief.", src: ["village", "postEn"] },
+  council_2026: { noun: "constituencies", title: "City Council constituencies", group: "Elections", label: num,
+    about: "For the 28 November 2026 election, two districts each. The two Indigenous constituencies cover the whole city and are not drawn.", src: ["council", "cecdb"] },
+  legislator: { noun: "constituencies", title: "Legislative constituencies", group: "Elections", label: num,
+    about: "Assigned by village from the 2024 election database.", src: ["cecdb", "gazette", "village"] },
+  polling_2026: { noun: "polling stations", title: "Polling-station areas", group: "Elections",
+    about: "For 28 November 2026, built from the lin each station serves.", src: ["polls", "pollsfix", "lin", "village"] },
+  school_elementary: { noun: "zones", title: "Elementary school zones", group: "Schools",
+    about: "For 2026–27, from the Department of Education’s village and lin table.", src: ["school", "lin", "village"] },
+  school_junior_high: { noun: "zones", title: "Junior high school zones", group: "Schools",
+    about: "Same method. Areas in New Taipei served by Taipei schools are not shown.", src: ["school", "lin", "village"] },
+  police_precinct: { noun: "precincts", title: "Police precincts", group: "Public safety", label: u => u.n.replace(" Precinct", ""),
+    about: "From the villages listed on precinct websites. Daan Precinct lists none and is drawn as Da’an District.", src: ["police", "village"] },
+  police_station: { noun: "police stations", title: "Police station areas", group: "Public safety",
+    about: "From the same lists. Daan Precinct publishes none, so Da’an District is blank.", src: ["police", "village"] },
+  fire_brigade: { noun: "battalions", title: "Fire & EMS battalions", group: "Public safety", label: num,
+    about: "Three districts each.", src: ["fire"] },
+  court_district: { noun: "courts", title: "District courts", group: "Courts", label: u => u.n.replace("Taiwan ", "").replace(" District Court", ""),
+    about: "Each covers the areas of its summary courts.", src: ["court"] },
+  court_summary: { noun: "summary courts", title: "Summary courts", group: "Courts", label: u => u.n.replace(" Summary Division", "").replace(" Summary Court", ""),
+    about: "Wenshan is served by the Xindian Summary Division in New Taipei.", src: ["court"] },
+  sanitation: { noun: "teams", title: "Sanitation teams", group: "City services", label: u => u.n.replace(" District sanitation team", ""),
+    about: "One per district.", src: ["sanitation"] },
+  health_center: { noun: "health centers", title: "Health centers", group: "City services", label: u => u.n.replace(" District health center", ""),
+    about: "One per district.", src: ["health"] },
+  postal3: { noun: "codes", title: "Postal codes (3-digit)", group: "City services", label: num,
+    about: "One per district.", src: ["post"] },
+  subdistrict: { noun: "subdistricts", title: "Subdistricts", group: "Statistics & planning",
+    about: "As published. They mostly follow village lines.", src: ["sub"] },
+  segis_l2: { noun: "areas", title: "Statistical areas (level 2)", group: "Statistics & planning",
+    about: "As published, on 2015 boundaries.", src: ["segis"] },
+  zoning_heritage: { noun: "polygons", title: "Heritage zones", group: "Statistics & planning", patch: true,
+    about: "Preservation zones from the urban-plan zoning map. Zoom in to see them.", src: ["zoning"] },
+  zoning_industrial: { noun: "polygons", title: "Industrial zones", group: "Statistics & planning", patch: true,
+    about: "Zones with codes starting with I, from the urban-plan zoning map.", src: ["zoning"] },
+};
+// the Chinese page: the same layers, sources and drawing; titles, descriptions and map labels in Chinese
+const LAYER_ZH = {
+  district: { noun: "個行政區", title: "行政區", group: "行政", label: u => u.n, about: "由 456 個里合併而成。" },
+  village: { noun: "個里", title: "里", group: "行政", about: "每個里有一位民選里長。" },
+  council_2026: { noun: "個選區", title: "市議員選區", group: "選舉", label: num,
+    about: "2026 年 11 月 28 日選舉，每區由兩個行政區組成。兩個原住民選區涵蓋全市，沒有另外畫出。" },
+  legislator: { noun: "個選區", title: "立法委員選區", group: "選舉", label: num, about: "依 2024 年選舉資料庫，以里分配。" },
+  polling_2026: { noun: "個投開票所", title: "投開票所轄區", group: "選舉", about: "2026 年 11 月 28 日選舉，由每個投開票所負責的鄰組成。" },
+  school_elementary: { noun: "個學區", title: "國小學區", group: "學校", about: "115 學年度（2026–27），依教育局的學區里鄰對照表。" },
+  school_junior_high: { noun: "個學區", title: "國中學區", group: "學校", about: "做法同國小。新北市境內由臺北市學校服務的區域沒有畫出。" },
+  police_precinct: { noun: "個分局", title: "警察分局", group: "公共安全", label: u => u.n.replace("分局", ""),
+    about: "依各分局網站列出的里。大安分局沒有列出，以大安區範圍畫出。" },
+  police_station: { noun: "個派出所", title: "派出所轄區", group: "公共安全", about: "依同一批名單。大安分局沒有公布，所以大安區空白。" },
+  fire_brigade: { noun: "個大隊", title: "消防大隊", group: "公共安全", label: num, about: "每個大隊負責三個行政區。" },
+  court_district: { noun: "個法院", title: "地方法院", group: "法院", label: u => u.n.replace("臺灣", "").replace("地方法院", ""),
+    about: "轄區是所屬簡易庭轄區的總和。" },
+  court_summary: { noun: "個簡易庭", title: "簡易庭", group: "法院", label: u => u.n.replace("簡易庭", ""), about: "文山區由新北市的新店簡易庭管轄。" },
+  sanitation: { noun: "個清潔隊", title: "區清潔隊", group: "市政服務", label: u => u.n.replace("清潔隊", ""), about: "每區一隊。" },
+  health_center: { noun: "個中心", title: "健康服務中心", group: "市政服務", label: u => u.n.replace("健康服務中心", ""), about: "每區一個。" },
+  postal3: { noun: "個郵遞區號", title: "郵遞區號（3 碼）", group: "市政服務", label: num, about: "每區一個。" },
+  subdistrict: { noun: "個次分區", title: "次分區", group: "統計與規劃", about: "照公布的範圍，大多沿著里界。" },
+  segis_l2: { noun: "個發布區", title: "統計區（二級發布區）", group: "統計與規劃", about: "照公布的範圍，2015 年的界線。" },
+  zoning_heritage: { noun: "個多邊形", title: "保存區", group: "統計與規劃", about: "都市計畫使用分區圖中的保存區。放大才看得到。" },
+  zoning_industrial: { noun: "個多邊形", title: "工業區", group: "統計與規劃", about: "都市計畫使用分區圖中代碼以 I 開頭的分區。" },
+};
+const LAYER = LANG === "zh"
+  ? Object.fromEntries(Object.entries(LAYER_EN).map(([l, m]) => [l, { ...m, label: undefined, ...LAYER_ZH[l] }]))
+  : LAYER_EN;
+const ORDER = ["district", "village", "council_2026", "legislator", "polling_2026", "school_elementary", "school_junior_high",
+  "police_precinct", "police_station", "fire_brigade", "court_district", "court_summary", "sanitation", "health_center",
+  "postal3", "subdistrict", "segis_l2", "zoning_heritage", "zoning_industrial"];
+const OFFICIAL = ["subdistrict", "segis_l2", "zoning_heritage", "zoning_industrial"];
+const NULLS = new Set(["Not determined", "Station not published"]);
+const DOWNLOADS = {"district": ["downloads/layers/taipei_district.zip", "112 KB"], "village": ["downloads/layers/taipei_village.zip", "315 KB"], "council_2026": ["downloads/layers/taipei_council_2026.zip", "85 KB"], "legislator": ["downloads/layers/taipei_legislator.zip", "98 KB"], "polling_2026": ["downloads/layers/taipei_polling_2026.zip", "630 KB"], "school_elementary": ["downloads/layers/taipei_school_elementary.zip", "280 KB"], "school_junior_high": ["downloads/layers/taipei_school_junior_high.zip", "231 KB"], "police_precinct": ["downloads/layers/taipei_police_precinct.zip", "116 KB"], "police_station": ["downloads/layers/taipei_police_station.zip", "193 KB"], "fire_brigade": ["downloads/layers/taipei_fire_brigade.zip", "81 KB"], "court_district": ["downloads/layers/taipei_court_district.zip", "68 KB"], "court_summary": ["downloads/layers/taipei_court_summary.zip", "84 KB"], "sanitation": ["downloads/layers/taipei_sanitation.zip", "112 KB"], "health_center": ["downloads/layers/taipei_health_center.zip", "112 KB"], "postal3": ["downloads/layers/taipei_postal3.zip", "112 KB"], "subdistrict": ["downloads/layers/taipei_subdistrict.zip", "179 KB"], "segis_l2": ["downloads/layers/taipei_segis_l2.zip", "447 KB"], "zoning_heritage": ["downloads/layers/taipei_zoning_heritage.zip", "7 KB"], "zoning_industrial": ["downloads/layers/taipei_zoning_industrial.zip", "51 KB"]};  // web/site.py fills this in: {layer: [zip path, size]}
+
+const $ = id => document.getElementById(id);
+const fmtInt = d3.format(",");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const hasCJK = s => /[㐀-鿿]/.test(s || "");
+
+let KEYS = {};  // per layer: the token that names each unit in the address
+let U, OV, FEAT = {}, BOX = {}, LAYERS, proj, path, zoom, svg, gZoom, transform = d3.zoomIdentity;
+let BASEMAP = {}, METRO = [], POP_MONTH = "", CITY_POP = 0;
+const state = { layer: "district", sel: null, point: null, addr: null, shade: false, base: "simple" };
+const DATA = "../data/";  // where the data files are; web/site.py sets "data/" ("../data/" on the Chinese page)
+const BASE = "../";  // the site folder, for the downloads; web/site.py sets "../" on the Chinese page
+const BREAKS = [5000, 15000, 25000, 40000];  // residents per km², fixed so layers can be compared
+const NOPOP = {
+  lin: tr("No population: these zones are built from lin, and lin population is not published.", "沒有人口：這些區域由鄰組成，鄰的人口沒有公開。"),
+  shape: tr("No population: these shapes do not follow village lines.", "沒有人口：這些區域不沿著里界。"),
+};
+const NOPOP_LAYER = { polling_2026: "lin", school_elementary: "lin", school_junior_high: "lin", subdistrict: "shape", segis_l2: "shape", zoning_heritage: "shape", zoning_industrial: "shape" };
+const hasPop = l => U[l].some(u => u.pop != null);
+const density = u => u.pop != null && u.km2 > 0 ? u.pop / u.km2 : null;
+const shadeOn = (l, i) => state.shade && U[l][i].pop != null && !isNull(l, i);
+const densClass = d => d == null ? 0 : 1 + BREAKS.filter(b => d >= b).length;
+
+function fmtArea(km2) {
+  if (km2 == null) return "";
+  if (km2 >= 0.1) return `${km2.toLocaleString("en", { maximumFractionDigits: 2 })} km²`;
+  const m2 = Math.round(km2 * 1e6);
+  return m2 < 1 ? "<1 m²" : `${fmtInt(m2)} m²`;
+}
+function fmtPct(bp) {
+  const p = bp / 100;
+  if (p >= 99.95) return "100%";
+  if (p < 0.1) return "<0.1%";
+  return (p >= 10 ? p.toFixed(0) : p.toFixed(1)) + "%";
+}
+function isNull(layer, i) { return NULLS.has(enOf(U[layer][i]).n); }
+function countUnits(l) {
+  const real = U[l].filter(u => !NULLS.has(enOf(u).n));
+  return l === "police_station" ? real.filter(u => !enOf(u).n.includes(" / ")).length : real.length;
+}
+function countText(l) {
+  const n = countUnits(l), m = LAYER[l];
+  if (l === "police_station") return tr(`${fmtInt(n)} police stations + 3 shared villages`, `${fmtInt(n)} 個派出所，另有 3 個里由兩所共管`);
+  if (l === "school_elementary") return tr(`${fmtInt(n)} zones for 140 schools`, `${fmtInt(n)} 個學區，140 所學校`);
+  if (l === "school_junior_high") return tr(`${fmtInt(n)} zones for 72 schools`, `${fmtInt(n)} 個學區，72 所學校`);
+  return tr(`${fmtInt(n)} ${m.noun}`, `${fmtInt(n)} ${m.noun}`);
+}
+function nameHTML(u) { return hasCJK(u.n) ? `<span class="zh">${esc(u.n)}</span>` : esc(u.n); }
+
+// ---------- geometry helpers (planar TWD97 coordinates)
+function bbox(geom) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.type === "MultiPolygon" ? geom.coordinates : [];
+  for (const p of polys) for (const [x, y] of p[0]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x0, y0, x1, y1];
+}
+function inRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function contains(geom, x, y) {
+  const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.type === "MultiPolygon" ? geom.coordinates : [];
+  for (const p of polys) {
+    if (!inRing(x, y, p[0])) continue;
+    let hole = false;
+    for (let k = 1; k < p.length; k++) if (inRing(x, y, p[k])) { hole = true; break; }
+    if (!hole) return true;
+  }
+  return false;
+}
+function unitAt(layer, x, y) {
+  const f = FEAT[layer], b = BOX[layer];
+  for (let i = 0; i < f.length; i++) {
+    const bb = b[i];
+    if (x < bb[0] || x > bb[2] || y < bb[1] || y > bb[3]) continue;
+    if (f[i].geometry && contains(f[i].geometry, x, y)) return i;
+  }
+  return -1;
+}
+
+// ---------- layer list
+function buildLayerList() {
+  const nav = $("layers"), sel = $("layer-sel");
+  let html = `<h2 style="padding:6px 8px 0">${tr("Layers", "圖層")}</h2>`, group = null, opt = "";
+  for (const l of ORDER) {
+    const m = LAYER[l], n = countUnits(l);
+    if (m.group !== group) {
+      if (group) html += "</div>";
+      html += `<div class="group" role="group" aria-label="${esc(m.group)}"><div class="section-label">${esc(m.group)}</div>`;
+      if (group) opt += "</optgroup>";
+      opt += `<optgroup label="${esc(m.group)}">`;
+      group = m.group;
+    }
+    html += `<button class="layer-btn" data-layer="${l}" aria-pressed="false"><span>${esc(m.title)}</span><span class="count">${fmtInt(n)}</span></button>`;
+    opt += `<option value="${l}">${esc(m.title)}${tr(` (${fmtInt(n)})`, `（${fmtInt(n)}）`)}</option>`;
+  }
+  nav.innerHTML = html + "</div>";
+  sel.innerHTML = opt + "</optgroup>";
+  nav.addEventListener("click", e => { const b = e.target.closest(".layer-btn"); if (b) setLayer(b.dataset.layer, true); });
+  sel.addEventListener("change", () => setLayer(sel.value, true));
+}
+
+// ---------- drawing
+function drawLayer() {
+  const l = state.layer, m = LAYER[l], feats = FEAT[l];
+  const sparse = feats.length <= 20;
+  const g = d3.select("#units");
+  g.selectAll("path").remove();
+  g.selectAll("path").data(feats).join("path")
+    .attr("class", (f, i) => "unit" + (isNull(l, i) ? " null" : "") + (m.patch ? " patch" : "") + (sparse ? " sparse" : "") + (shadeOn(l, i) ? " shaded" : ""))
+    .attr("style", (f, i) => shadeOn(l, i) ? `fill: var(--d${densClass(density(U[l][i]))})` : null)
+    .attr("d", path)
+    .on("pointermove", (ev, f) => showTip(ev, l, f.properties.i))
+    .on("pointerleave", hideTip)
+    .on("click", (ev, f) => {
+      const [px, py] = d3.pointer(ev, svg.node());
+      const [x, y] = proj.invert(transform.invert([px, py]));
+      state.point = [x, y]; state.addr = null;
+      select(l, f.properties.i, false);
+    });
+  // context: district lines, except on layers whose own lines already include them
+  const ctxOff = ["district", "council_2026", "fire_brigade", "court_district", "court_summary", "sanitation", "health_center", "postal3", "police_precinct", "legislator"];
+  d3.select("#ctx").attr("d", ctxOff.includes(l) ? null : path(FEAT.districtMesh));
+  drawLabels();
+  drawLegend();
+}
+function drawLabels() {
+  const l = state.layer, m = LAYER[l];
+  const lab = d3.select("#labels");
+  lab.selectAll("text").remove();
+  if (!m.label || FEAT[l].length > 20) return;
+  const data = FEAT[l].map((f, i) => {
+    let geom = f.geometry;
+    if (geom.type === "MultiPolygon") { // label the largest part
+      let best = null, ba = -1;
+      for (const c of geom.coordinates) { const g1 = { type: "Polygon", coordinates: c }; const a = path.area(g1); if (a > ba) { ba = a; best = g1; } }
+      geom = best;
+    }
+    return { c: path.centroid(geom), a: path.area(geom), t: m.label(U[l][i]), zh: hasCJK(m.label(U[l][i])) };
+  });
+  lab.selectAll("text").data(data).join("text").attr("class", d => "lbl" + (d.zh ? " zh" : "")).text(d => d.t);
+  placeLabels();
+}
+function placeLabels() {
+  placeMetro();
+  placeFacilities();
+  d3.select("#labels").selectAll("text").attr("x", d => transform.applyX(d.c[0])).attr("y", d => transform.applyY(d.c[1]));
+  declutter();
+  if (state.point) {
+    const p = proj(state.point);
+    d3.select("#pin").attr("cx", transform.applyX(p[0])).attr("cy", transform.applyY(p[1])).attr("hidden", null);
+  } else d3.select("#pin").attr("hidden", "");
+}
+// hide a label that would overlap one already placed; larger units are placed first, and hidden labels return when zoomed in
+function declutter() {
+  const texts = d3.select("#labels").selectAll("text").attr("visibility", null).nodes()
+    .sort((p, q) => d3.select(q).datum().a - d3.select(p).datum().a);
+  const kept = [];
+  for (const t of texts) {
+    const b = t.getBBox(), r = [b.x - 2, b.y - 1, b.x + b.width + 2, b.y + b.height + 1];
+    if (kept.some(k => r[0] < k[2] && r[2] > k[0] && r[1] < k[3] && r[3] > k[1])) t.setAttribute("visibility", "hidden");
+    else kept.push(r);
+  }
+}
+function drawLegend() {
+  const l = state.layer, hasNull = U[l].some(u => NULLS.has(enOf(u).n));
+  let html = `<div class="row"><svg width="22" height="12"><rect x="1" y="1" width="20" height="10" style="fill:${LAYER[l].patch ? "var(--line)" : "none"};fill-opacity:.1;stroke:var(--line)"></rect></svg>${esc(LAYER[l].title)}</div>`;
+  if (hasNull) html += `<div class="row"><svg width="22" height="12"><rect x="1" y="1" width="20" height="10" style="fill:url(#hatch);stroke:var(--null)"></rect></svg>${tr("Not determined from official data", "官方資料無法判定")}</div>`;
+  if (state.sel) html += `<div class="row"><svg width="22" height="12"><rect x="1" y="1" width="20" height="10" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:2"></rect></svg>${tr("Selected", "已選取")}</div>`;
+  const bm = BASEMAPS[state.base];
+  const mrt = `<svg width="12" height="12"><circle cx="6" cy="6" r="2.5" class="metro"></circle></svg>${tr("MRT", "捷運")}`, hide = metroLevel() ? "" : " hidden";
+  html += bm.url
+    ? `<div class="row metro-key" style="color:var(--ink-3)"${hide}>${mrt}</div>`
+    : `<div class="row" style="color:var(--ink-3)"><svg width="22" height="12"><rect x="1" y="2" width="9" height="8" style="fill:var(--water)"></rect><rect x="12" y="2" width="9" height="8" style="fill:var(--road);stroke:var(--rule)"></rect></svg>${tr("River zones, roads &gt; 8 m", "河川區、8 公尺以上道路")} <span class="metro-key"${hide}>${mrt}</span></div>`;
+  if (FAC[l]) html += `<div class="row"><svg width="22" height="12"><rect x="7.5" y="2.5" width="7" height="7" class="fac"></rect></svg><span>${esc(FAC_KIND[l][2])}${FAC_ZOOM.has(l) ? `<span class="fac-zoom">${tr(", all shown when zoomed in", "，放大後全部顯示")}</span>` : ""}</span></div>`;
+  if (hasPop(l)) {
+    html += `<label class="row" for="shade"><input type="checkbox" id="shade"${state.shade ? " checked" : ""}> ${tr("Shade by population density", "依人口密度著色")}</label>`;
+    if (state.shade) html += `<div><div class="scale">${[1, 2, 3, 4, 5].map(k => `<span style="background:var(--d${k})"></span>`).join("")}</div>
+      <div class="ticks"><span>0</span>${BREAKS.map(b => `<span>${tr(`${b / 1000}k`, b < 10000 ? `${b / 1000}千` : `${b / 10000}萬`)}</span>`).join("")}</div>
+      <div class="ticks" style="display:block">${tr(`residents per km², ${esc(POP_MONTH)}`, `每平方公里人口，${esc(POP_MONTH)}`)}</div></div>`;
+  }
+  if (bm.url) html += `<span class="attrib">${bm.credit}${tr(": ", "：")}<a href="${UDD_DOC}" target="_blank" rel="noopener">${tr("Taipei City Urban Development Dept.", "臺北市政府都市發展局")}</a></span>`;
+  $("legend").innerHTML = html;
+  const cb = $("shade"); if (cb) cb.onchange = () => setShade(cb.checked);
+}
+function drawBase() {
+  d3.select("#water").attr("d", path(BASEMAP.water));
+  d3.select("#roads").attr("d", path(BASEMAP.roads));
+}
+// MRT stations appear only when zoomed in, like the stations on the NYC Boundaries base map. The thresholds are in
+// metres per screen pixel, so they mean the same on a phone and a desktop: 8 is reached by selecting a village, a school
+// zone or a police station area (not a district), 4 by selecting a village of ordinary size. Never at the whole-city
+// view (k < 1.5), even on a very large screen.
+const METRO_DOTS = 8, METRO_NAMES = 4;
+const metresPerPx = () => 1 / (proj.scale() * transform.k);
+// closest zoom: a quarter metre per screen pixel, the same on every screen size, so the city's level-13 tiles
+// (0.26 m, drawn at 1:1000) show at full detail
+const MAX_ZOOM_MPP = 0.25;
+const maxZoomK = () => Math.max(1, 1 / (proj.scale() * MAX_ZOOM_MPP));
+function metroLevel() {  // 0 nothing, 1 dots, 2 dots and names
+  if (state.base === "emap") return 0;  // the street map has its own stations
+  const m = metresPerPx();
+  return transform.k < 1.5 || m > METRO_DOTS ? 0 : m > METRO_NAMES ? 1 : 2;
+}
+function placeMetro() {
+  const g = d3.select("#metro"), level = metroLevel();
+  const pts = level ? METRO.map(([x, y, n]) => { const p = proj([x, y]); return { x: transform.applyX(p[0]), y: transform.applyY(p[1]), n }; }) : [];
+  g.selectAll("circle").data(pts).join("circle").attr("class", "metro").attr("r", 2.5).attr("cx", d => d.x).attr("cy", d => d.y);
+  g.selectAll("text").data(level === 2 ? pts : []).join("text").attr("class", "metro-lbl").attr("x", d => d.x + 6).attr("y", d => d.y + 3.5).text(d => d.n);
+  d3.selectAll("#legend .metro-key").attr("hidden", level ? null : "");
+}
+function drawSelection() {
+  const s = state.sel;
+  d3.select("#sel").attr("d", s ? path(FEAT[s.layer][s.i]) : null);
+  placeLabels();
+  drawLegend();
+  writeHash();
+}
+
+// ---------- base map tiles
+// Taipei City Urban Development Department WMTS in TWD97 (EPSG:3826), tile matrix set "default028mm":
+// top-left corner (-5372600, 10001100), 256-pixel tiles, metres per pixel = scale denominator x 0.00028.
+const UDD = "https://www.historygis.udd.gov.taipei/arcgis/rest/services/";
+const UDD_DOC = "https://www.historygis.udd.gov.taipei/urban/map/doc/%E8%87%BA%E5%8C%97%E5%B8%82%E6%94%BF%E5%BA%9C%E9%83%BD%E5%B8%82%E7%99%BC%E5%B1%95%E5%B1%80WMTS%E5%9C%96%E7%A3%9A%E6%9C%8D%E5%8B%99%E4%BB%8B%E6%8E%A5%E8%AA%AA%E6%98%8E.pdf";
+const WMTS = { x0: -5372600, y0: 10001100,
+  res: [1.181177957593862E7, 9449423.660750896, 4724711.830375448, 2362355.915187724, 944942.3660750897, 472471.18303754483,
+        236235.59151877242, 94494.23660750895, 47247.118303754476, 23623.559151877238, 9449.423660750896, 4724.711830375448,
+        2362.355915187724, 944.9423660750896, 472.4711830375448, 236.2355915187724].map(d => d * 0.00028) };
+const BASEMAPS = {
+  simple: { name: tr("Simple", "簡易") },
+  emap: { name: tr("Street map", "電子地圖"), credit: tr("Street map", "電子地圖"), cls: "emap", bbox: [296000, 2760900, 317600, 2789700],  // the service's own extent
+    url: (z, r, c) => `${UDD}Urban_97/EMap_97/MapServer/WMTS/tile/1.0.0/Urban_97_EMap_97/default/default028mm/${z}/${r}/${c}.png` },
+  aerial: { name: tr("Aerial", "航照"), credit: tr("Aerial photo (2025)", "航測影像（2025）"), cls: "aerial", bbox: [295200, 2760900, 317600, 2789700],
+    url: (z, r, c) => `${UDD}Aerial_97/Ortho_2025_97/MapServer/WMTS/tile/1.0.0/Aerial_97_Ortho_2025_97/default/default028mm/${z}/${r}/${c}` },
+};
+const TILES = new Map();  // "z/row/col" -> { img, z, r, c, done }
+let tileTimer, tileZ = -1, tileKeys = new Set();  // tileKeys: the tiles the current view needs
+const MAX_TILES = 150;  // per view; the city asks users of its tile service not to fetch large batches in a short time
+
+function tileView() {
+  const bm = BASEMAPS[state.base], r = $("map").getBoundingClientRect();
+  // metres per DEVICE pixel: a high-resolution screen (2 device pixels per CSS pixel) gets tiles one level finer.
+  // Capped at 2, so a 3x phone screen asks for the same tiles as a 2x one rather than twice as many.
+  const mpp = metresPerPx() / Math.min(window.devicePixelRatio || 1, 2);
+  let z = WMTS.res.findIndex(res => res <= mpp * 1.25);   // coarsest level that is about as sharp as the screen
+  if (z < 0) z = WMTS.res.length - 1;
+  const [xa, ya] = proj.invert(transform.invert([0, 0])), [xb, yb] = proj.invert(transform.invert([r.width, r.height]));
+  const x0 = Math.max(Math.min(xa, xb), bm.bbox[0]), x1 = Math.min(Math.max(xa, xb), bm.bbox[2]);
+  const y0 = Math.max(Math.min(ya, yb), bm.bbox[1]), y1 = Math.min(Math.max(ya, yb), bm.bbox[3]);
+  const cover = z => {  // the tiles of level z that the view needs
+    const span = 256 * WMTS.res[z], need = [];
+    if (x0 < x1 && y0 < y1) {
+      const c0 = Math.floor((x0 - WMTS.x0) / span), c1 = Math.floor((x1 - WMTS.x0) / span);
+      const r0 = Math.floor((WMTS.y0 - y1) / span), r1 = Math.floor((WMTS.y0 - y0) / span);
+      for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) need.push([z, row, col]);
+    }
+    return need;
+  };
+  let need = cover(z);
+  while (need.length > MAX_TILES && z > 0) need = cover(--z);  // a very large screen: one level coarser rather than hundreds of tiles
+  return { z, need };
+}
+function placeTile(t) {
+  // Tile edges are snapped to whole device pixels (an edge shared by two tiles is worked out the same way for both),
+  // and each tile reaches a little into its right and lower neighbours: 1 device pixel, or 2 on screens scaled to
+  // 125% or 150%. Otherwise the background shows through as hairline seams between tiles.
+  const span = 256 * WMTS.res[t.z], d = window.devicePixelRatio || 1, over = (Number.isInteger(d) ? 1 : 2) / d;
+  const ex = c => Math.round(transform.applyX(proj([WMTS.x0 + c * span, 0])[0]) * d) / d;
+  const ey = r => Math.round(transform.applyY(proj([0, WMTS.y0 - r * span])[1]) * d) / d;
+  const left = ex(t.c), top = ey(t.r);
+  t.img.style.left = left + "px";
+  t.img.style.top = top + "px";
+  t.img.style.width = (ex(t.c + 1) - left + over) + "px";
+  t.img.style.height = (ey(t.r + 1) - top + over) + "px";
+}
+function updateTiles(load) {
+  const bm = BASEMAPS[state.base], box = $("tiles");
+  if (!bm.url) { TILES.forEach(t => t.img.remove()); TILES.clear(); return; }
+  if (load) {
+    const { z, need } = tileView();
+    tileZ = z;
+    tileKeys = new Set(need.map(n => n.join("/")));
+    for (const [z1, r, c] of need) {
+      const key = `${z1}/${r}/${c}`;
+      if (TILES.has(key)) continue;
+      const img = new Image(), t = { img, z: z1, r, c, done: false };
+      img.alt = "";
+      img.decoding = "async";
+      img.onload = () => { t.done = true; sweep(); };
+      img.onerror = () => { t.done = true; img.remove(); sweep(); };
+      img.src = bm.url(z1, r, c);
+      TILES.set(key, t);
+      box.appendChild(img);
+    }
+    sweep();
+  }
+  TILES.forEach(t => { t.img.style.zIndex = t.z === tileZ ? 2 : 1; placeTile(t); });
+}
+// once every tile of the CURRENT view has arrived, drop the ones from other zoom levels or out of view.
+// It always checks the current view: a slow tile from an earlier view must not clear the newer tiles.
+function sweep() {
+  for (const k of tileKeys) { const t = TILES.get(k); if (!t || !t.done) return; }
+  for (const [k, t] of TILES) if (!tileKeys.has(k)) { t.img.remove(); TILES.delete(k); }
+}
+function scheduleTiles() {
+  updateTiles(false);  // move and scale what is already there on every frame
+  clearTimeout(tileTimer);
+  tileTimer = setTimeout(() => updateTiles(true), 150);  // ask for new tiles once the map stops moving
+}
+function setBase(k) {
+  if (!BASEMAPS[k] || k === state.base) return;
+  state.base = k;
+  const bm = BASEMAPS[k];
+  TILES.forEach(t => t.img.remove()); TILES.clear();
+  $("tiles").className = "tiles" + (bm.cls ? " " + bm.cls : "");
+  const mb = $("mapbox");
+  mb.classList.toggle("has-tiles", !!bm.url);
+  mb.classList.toggle("base-emap", k === "emap");
+  mb.classList.toggle("base-aerial", k === "aerial");
+  updateTiles(true);
+  placeMetro();
+  drawLegend();
+  drawBaseSwitch();
+}
+
+// ---------- base map switch, as in Google Maps: a "Layers" thumbnail that opens one thumbnail per base map.
+// Every thumbnail shows the same square, one level-10 tile on the Tamsui River west of Ximen. The street map and
+// aerial thumbnails are that tile, loaded from the city's server like the map itself; Simple is drawn from our data.
+const THUMB = { z: 10, r: 10674, c: 8376 };
+const LAYERS_ICON = `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 4.2 6 6.9 1 4.2Z" fill="currentColor"></path><path d="M1.6 6.6 6 9 10.4 6.6" fill="none" stroke="currentColor" stroke-width="1.3"></path></svg>`;
+let SIMPLE_THUMB = "";
+function drawSimpleThumb() {
+  const span = 256 * WMTS.res[THUMB.z], x0 = WMTS.x0 + THUMB.c * span, y1 = WMTS.y0 - THUMB.r * span, s = 64 / span;
+  const p = d3.geoPath(d3.geoIdentity().reflectY(true).scale(s).translate([-x0 * s, y1 * s]).clipExtent([[0, 0], [64, 64]]));
+  SIMPLE_THUMB = `<svg class="bm-thumb" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" style="fill:var(--land)"></rect>`
+    + `<path d="${p(BASEMAP.water) || ""}" style="fill:var(--water)"></path><path d="${p(BASEMAP.roads) || ""}" style="fill:var(--road)"></path></svg>`;
+}
+function thumb(k, lazy) {
+  const b = BASEMAPS[k];
+  return b.url ? `<img class="bm-thumb ${b.cls}" alt=""${lazy ? ' loading="lazy"' : ""} src="${b.url(THUMB.z, THUMB.r, THUMB.c)}">` : SIMPLE_THUMB;
+}
+function drawBaseSwitch() {
+  const preview = state.base === "aerial" ? "simple" : "aerial";  // like Google: the closed button shows another base map
+  $("basemaps").innerHTML = `<button type="button" class="bm-toggle" id="bm-toggle" aria-expanded="false" aria-controls="bm-menu"
+      aria-label="${tr(`Base map: ${BASEMAPS[state.base].name}. Choose another`, `底圖：${BASEMAPS[state.base].name}，選擇其他底圖`)}">${thumb(preview, false)}<span class="bm-label">${LAYERS_ICON}${tr("Layers", "圖層")}</span></button>
+    <div class="bm-menu" id="bm-menu" role="group" aria-label="${tr("Base map", "底圖")}" hidden>${Object.entries(BASEMAPS).map(([k, b]) =>
+      `<button type="button" data-base="${k}" aria-pressed="${state.base === k}">${thumb(k, true)}<span>${b.name}</span></button>`).join("")}</div>`;
+  $("bm-toggle").onclick = () => openBaseMenu($("bm-menu").hidden);
+  $("bm-menu").querySelectorAll("[data-base]").forEach(b => { b.onclick = () => { openBaseMenu(false); setBase(b.dataset.base); $("bm-toggle").focus(); }; });
+}
+function openBaseMenu(open) {
+  $("bm-menu").hidden = !open;
+  $("bm-toggle").setAttribute("aria-expanded", open);
+}
+
+// ---------- facilities: the office, station or school behind a unit, at its official street address
+const FAC_KIND = tr({  // [one, several (panel heading), legend]
+  district: ["District office", "District office", "District offices"], police_precinct: ["Precinct headquarters", "Precinct headquarters", "Precinct headquarters"],
+  police_station: ["Police station", "Police stations", "Police stations"], health_center: ["Health center", "Health center", "Health centers"],
+  school_elementary: ["School", "Schools", "Schools"], school_junior_high: ["School", "Schools", "Schools"],
+  fire_brigade: ["Fire station", "Fire stations in this area", "Fire stations"],
+  village: ["Evacuation shelter", "Evacuation shelters", "Evacuation shelters"], polling_2026: ["Polling place", "Polling place", "Polling places"] }, {
+  district: ["區公所", "區公所", "區公所"], police_precinct: ["分局", "分局", "分局"],
+  police_station: ["派出所", "派出所", "派出所"], health_center: ["健康服務中心", "健康服務中心", "健康服務中心"],
+  school_elementary: ["學校", "學校", "學校"], school_junior_high: ["學校", "學校", "學校"],
+  fire_brigade: ["消防分隊", "這個區域的消防分隊", "消防分隊"],
+  village: ["避難收容處所", "避難收容處所", "避難收容處所"], polling_2026: ["投開票地點", "投開票地點", "投開票地點"] });
+const facDetail = p => p[LANG === "zh" ? 5 : 4];  // the detail line a point carries (a shelter's type and use), in the page's language
+const FAC_SRC = { district: ["agencies", "addr"], police_precinct: ["policeUnits", "addr"], police_station: ["policeUnits", "addr"],
+  health_center: ["healthList", "addr"], school_elementary: ["eduList", "agencies", "addr"], school_junior_high: ["eduList", "agencies", "addr"],
+  fire_brigade: ["fireList"], village: ["shelters", "evacMaps", "addr"], polling_2026: ["addr"] };
+// layers with hundreds of points: only the selected unit's are drawn until the map is zoomed in as far as for the MRT dots
+const FAC_ZOOM = new Set(["village", "polling_2026"]);
+let FAC = {};
+const facOf = (l, i) => (FAC[l] && FAC[l].units[i]) || [];
+function placeFacilities() {
+  const l = state.layer, F = FAC[l], g = d3.select("#fac");
+  if (!F) { g.selectAll("*").remove(); return; }
+  const on = new Set(state.sel && state.sel.layer === l ? facOf(l, state.sel.i) : []);
+  const all = !FAC_ZOOM.has(l) || (transform.k >= 1.5 && metresPerPx() <= METRO_DOTS);
+  const pts = F.pts.map((q, k) => { const [x, y, n, a] = q, t = facDetail(q), p = proj([x, y]); return { k, x: transform.applyX(p[0]), y: transform.applyY(p[1]), n, a, t, on: on.has(k) }; })
+    .filter(d => d.on || all);
+  pts.sort((a, b) => a.on - b.on);  // selected ones on top
+  g.selectAll("rect").data(pts, d => d.k).join("rect")
+    .attr("class", d => "fac" + (d.on ? " on" : ""))
+    .attr("width", d => d.on ? 10 : 7).attr("height", d => d.on ? 10 : 7)
+    .attr("x", d => d.x - (d.on ? 5 : 3.5)).attr("y", d => d.y - (d.on ? 5 : 3.5))
+    .on("pointermove", (ev, d) => showFacTip(ev, l, d))
+    .on("pointerleave", hideTip)
+    .on("click", (ev, d) => {  // same as clicking the map at that spot
+      ev.stopPropagation();
+      const [x, y] = F.pts[d.k];
+      const i = unitAt(l, x, y);
+      if (i >= 0) { state.point = [x, y]; state.addr = null; select(l, i, false); }
+    })
+    .order();
+  g.selectAll("text").data(pts.filter(d => d.on), d => d.k).join("text")
+    .attr("class", "fac-lbl").attr("x", d => d.x + 9).attr("y", d => d.y + 4).text(d => d.n);
+}
+function showFacTip(ev, l, d) {
+  const tip = $("tip"), r = $("mapbox").getBoundingClientRect();
+  tip.innerHTML = `<div class="zh">${esc(d.n)}</div><div class="t-sub">${esc(FAC_KIND[l][0])}</div><div class="t-sub zh">${esc(d.a)}</div>${d.t ? `<div class="t-sub">${esc(d.t)}</div>` : ""}`;
+  tip.hidden = false;
+  let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 14;
+  if (x + tip.offsetWidth > r.width - 8) x = ev.clientX - r.left - tip.offsetWidth - 14;
+  if (y + tip.offsetHeight > r.height - 8) y = ev.clientY - r.top - tip.offsetHeight - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const NOT_ON_MAP = tr("Not on the map: its address is not in the house-number data", "不在地圖上：門牌資料裡沒有這個地址");
+function facItem(F, k, out) {  // name, address, the detail line the data carries (a shelter's type and use), a note
+  const p = F.pts[k];
+  return `<li><span class="zh">${esc(p[2])}</span><span class="fac-addr zh">${esc(p[3])}</span>${facDetail(p) ? `<span class="fac-note">${esc(facDetail(p))}</span>` : ""}${out.has(k) ? `<span class="fac-note">${tr("Stands outside the area it serves", "位在服務範圍之外")}</span>` : ""}</li>`;
+}
+function facHTML(l, i) {
+  const F = FAC[l]; if (!F) return "";
+  const ids = facOf(l, i), missing = (F.missing && F.missing[i]) || [], out = new Set(F.outside || []);
+  let html = "";
+  if (ids.length || missing.length) {
+    const many = ids.length + missing.length > 1;
+    const items = l === "polling_2026"   // the venue and address are already in the list above: say what else is there
+      ? ids.map(k => `<li><span class="fac-note">${esc(facDetail(F.pts[k]) || "")}</span></li>`).concat(missing.map(() => `<li><span class="fac-note">${NOT_ON_MAP}</span></li>`))
+      : ids.map(k => facItem(F, k, out)).concat(missing.map(n => `<li><span class="zh">${esc(n)}</span><span class="fac-note">${NOT_ON_MAP}</span></li>`));
+    html += `<div><div class="section-label" style="margin-bottom:6px">${esc(FAC_KIND[l][many ? 1 : 0])}</div><ul class="fac-list">${items.join("")}</ul></div>`;
+  }
+  if (l === "village") html += villageExtrasHTML(i);
+  return html;
+}
+// a village's district-wide shelters (listed "全區" in the source), and its evacuation map in Chinese and English
+function villageExtrasHTML(i) {
+  const F = FAC.village, u = U.village[i];
+  const d = enOf(u).s;  // district-wide shelters are listed by the district's English name
+  const wide = (F.groups && F.groups[d]) || [], wideMissing = (F.groupsMissing && F.groupsMissing[d]) || [];
+  let html = "";
+  if (wide.length || wideMissing.length) {
+    const items = wide.map(k => facItem(F, k, new Set())).concat(wideMissing.map(n => `<li><span class="zh">${esc(n)}</span><span class="fac-note">${NOT_ON_MAP}</span></li>`));
+    html += `<details class="fac-wide"><summary>${tr(`Shelters for the whole district (${items.length})`, `全區適用的避難處所（${items.length}）`)}</summary><ul class="fac-list">${items.join("")}</ul></details>`;
+  }
+  const [zh, en] = (F.maps && F.maps[i]) || [];
+  const links = [zh && `<a href="${esc(zh)}" target="_blank" rel="noopener">${tr("In Chinese (PDF)", "中文版（PDF）")}</a>`, en && `<a href="${esc(en)}" target="_blank" rel="noopener">${tr("In English (PDF)", "英文版（PDF）")}</a>`].filter(Boolean);
+  if (links.length) html += `<div><div class="section-label" style="margin-bottom:6px">${tr("Evacuation map", "簡易疏散避難圖")}</div><div class="fac-links">${links.join(" / ")}</div></div>`;
+  return html;
+}
+
+// ---------- tooltip
+function showTip(ev, l, i) {
+  const u = U[l][i], tip = $("tip"), r = $("mapbox").getBoundingClientRect();
+  tip.innerHTML = `<div>${nameHTML(u)}</div>${u.s ? `<div class="t-sub">${hasCJK(u.s) ? `<span class="zh">${esc(u.s)}</span>` : esc(u.s)}</div>` : ""}${u.pop != null ? `<div class="t-sub num">${tr(`${fmtInt(u.pop)} residents · ${fmtInt(Math.round(density(u)))} per km²`, `人口 ${fmtInt(u.pop)}，每平方公里 ${fmtInt(Math.round(density(u)))} 人`)}</div>` : ""}`;
+  tip.hidden = false;
+  let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 14;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  if (x + w > r.width - 8) x = ev.clientX - r.left - w - 14;
+  if (y + h > r.height - 8) y = ev.clientY - r.top - h - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { $("tip").hidden = true; }
+
+// ---------- panel
+function sourcesHTML(keys) {
+  return `<div class="section-label">${tr("Sources", "資料來源")}</div><ul class="sources">${keys.map(k => `<li><a href="${esc(SRC[k][1])}" target="_blank" rel="noopener">${esc(SRC[k][0])}</a></li>`).join("")}</ul>`;
+}
+function facHint(l) {
+  if (l === "fire_brigade") return tr("Squares mark the fire stations, at the Fire Department’s coordinates.", "方塊是消防分隊，位置用消防局公布的坐標。");
+  if (l === "village") return tr("Squares mark the evacuation shelters of the selected village, at their official street addresses; zoom in to see all of them. Each village also links to its official evacuation map.",
+    "方塊是選取的里的避難收容處所，位置是官方地址；放大可以看到全部。每個里也附上官方的簡易疏散避難圖。");
+  if (l === "polling_2026") return tr("A square marks the polling place of the selected area, at its official street address; zoom in to see all of them.",
+    "方塊是選取區域的投開票地點，位置是官方地址；放大可以看到全部。");
+  return tr(`Squares mark each ${FAC_KIND[l][0].toLowerCase()}, at its official street address.`, `方塊是各${FAC_KIND[l][0]}，位置是官方地址。`);
+}
+function renderPanel() { if (state.sel) renderUnit(); else renderLayerInfo(); }
+function renderLayerInfo() {
+  const l = state.layer, m = LAYER[l];
+  $("panel").innerHTML = (state.addr ? addrHTML() + `<p class="hint">${tr("Not inside any unit of this layer.", "不在這個圖層的任何單位內。")}</p>` : "") + `
+    <div><div class="kicker">${esc(m.group)}</div><h3>${esc(m.title)}</h3></div>
+    <p class="num">${countText(l)}</p>
+    <p>${esc(m.about)}</p>
+    <p class="hint">${hasPop(l) ? tr(`Population: ${esc(POP_MONTH)}, summed from villages. Shade by density in the legend.`, `人口：${esc(POP_MONTH)}，由各里加總。可在圖例中依人口密度著色。`) : esc(NOPOP[NOPOP_LAYER[l]] || "")}</p>
+    ${FAC[l] ? `<p class="hint">${facHint(l)}</p>` : ""}
+    <p class="hint">${tr("Click an area on the map, or search above for an address or a name.", "點地圖上的區域，或在上方查詢地址或名稱。")}</p>
+    ${DOWNLOADS && DOWNLOADS[l] ? `<p class="hint"><a href="${esc(BASE + DOWNLOADS[l][0])}" download>${tr("Download this layer", "下載這個圖層")}</a>${tr(` (GeoJSON, zipped, ${esc(DOWNLOADS[l][1])})`, `（GeoJSON，壓縮檔，${esc(DOWNLOADS[l][1])}）`)}</p>` : ""}
+    <div>${sourcesHTML([...m.src, ...(hasPop(l) ? ["pop"] : []), ...(FAC_SRC[l] || [])])}</div>`;
+  bindAddr();
+}
+function renderUnit() {
+  const { layer: l, i } = state.sel, u = U[l][i], m = LAYER[l];
+  const showZh = u.z && u.z !== u.n;
+  const attrs = (u.a || []).map(([k, v]) => `<dt>${esc(k)}</dt><dd${hasCJK(v) ? ' class="zh"' : ""}>${esc(v)}</dd>`).join("");
+  let html = (state.addr ? addrHTML() : "") + `
+    <div class="card-head"><div>
+      <div class="kicker">${esc(m.title)}</div>
+      <h3>${nameHTML(u)}</h3>
+      ${showZh ? `<div class="zhname">${esc(u.z)}</div>` : ""}
+      ${u.s ? `<div class="sub${hasCJK(u.s) ? " zh" : ""}">${esc(u.s)}</div>` : ""}
+    </div>${state.addr ? "" : `<button class="x" id="x" aria-label="${tr("Close and show the layer description", "關閉並顯示圖層說明")}">×</button>`}</div>
+    ${u.x ? `<div class="note">${esc(u.x)}</div>` : ""}
+    ${popHTML(l, u)}
+    <dl class="attrs num">${attrs}<dt>${tr("Area", "面積")}</dt><dd>${fmtArea(u.km2)}</dd></dl>
+    ${facHTML(l, i)}`;
+  html += `<div id="ovbox">${renderOverlaps(l, i)}</div>`;
+  html += `<button class="clear" id="clear">${state.addr ? tr(`Clear the ${placeNoun()}`, `清除${placeNoun()}`) : tr("Clear selection", "清除選取")}</button>`;
+  $("panel").innerHTML = html;
+  $("clear").onclick = clearAll;
+  if ($("x")) $("x").onclick = clearAll;
+  bindAddr();
+  bindOverlaps();
+}
+function clearAll() { state.sel = null; state.point = null; state.addr = null; drawSelection(); renderLayerInfo(); }
+// the overlap table is the largest file and is needed only once something is selected, so it loads after the map is up
+function refreshOverlaps() {
+  if (!state.sel || !$("ovbox")) return;
+  $("ovbox").innerHTML = renderOverlaps(state.sel.layer, state.sel.i);
+  bindOverlaps();
+}
+function bindOverlaps() {
+  $("panel").querySelectorAll(".ov-item").forEach(b => {
+    b.addEventListener("mouseenter", () => peek(b.dataset.l, +b.dataset.i));
+    b.addEventListener("mouseleave", () => peek(null));
+    b.addEventListener("focus", () => peek(b.dataset.l, +b.dataset.i));
+    b.addEventListener("blur", () => peek(null));
+    b.addEventListener("click", () => { peek(null); goTo(b.dataset.l, +b.dataset.i); });
+  });
+  $("panel").querySelectorAll(".ov-more").forEach(b => b.addEventListener("click", () => {
+    b.parentElement.querySelectorAll(".ov-item[hidden]").forEach(x => x.hidden = false); b.remove();
+  }));
+}
+function popHTML(l, u) {
+  if (u.pop != null) {
+    const share = u.pop / CITY_POP * 100;
+    return `<div><div class="pop">
+      <div><div class="v">${fmtInt(u.pop)}</div><div class="k">${tr("residents", "人口")}</div></div>
+      <div><div class="v">${fmtInt(u.hh)}</div><div class="k">${tr("households", "戶數")}</div></div>
+      <div><div class="v">${fmtInt(Math.round(density(u)))}</div><div class="k">${tr("per km²", "每平方公里人口")}</div></div></div>
+      <p class="hint" style="margin-top:6px">${tr(`${share >= 0.1 ? share.toFixed(1) : "<0.1"}% of Taipei’s residents. Household registration, ${esc(POP_MONTH)}.`, `占臺北市人口 ${share >= 0.1 ? share.toFixed(1) : "<0.1"}%。${esc(POP_MONTH)}戶籍登記人口。`)}</p></div>`;
+  }
+  return NOPOP_LAYER[l] && !isNull(l, state.sel.i) ? `<p class="hint">${esc(NOPOP[NOPOP_LAYER[l]])}</p>` : "";
+}
+function renderOverlaps(l, i) {
+  if (OV === undefined) return `<p class="hint">${tr("Loading the overlaps with other layers…", "正在載入與其他圖層的重疊…")}</p>`;
+  if (!OV) return `<p class="hint">${tr("The overlaps with other layers could not be loaded. Reload the page to try again.", "無法載入與其他圖層的重疊，請重新整理頁面再試一次。")}</p>`;
+  const rows = OV[l][i] || [];
+  const here = {};
+  if (state.point) for (const L of ORDER) if (L !== l) here[L] = state.addr ? placeUnit(L) : unitAt(L, state.point[0], state.point[1]);
+  const by = {};
+  for (const [li, j, sSelf, sOther] of rows) (by[LAYERS[li]] ||= []).push({ j, sSelf, sOther });
+  if (state.point) for (const L of ORDER) if (L !== l && here[L] >= 0 && !(by[L] || []).some(r => r.j === here[L])) (by[L] ||= []).push({ j: here[L], sSelf: null, sOther: null });
+  const blocks = ORDER.filter(L => L !== l && by[L]).map(L => {
+    const items = by[L].sort((a, b) => (b.j === here[L]) - (a.j === here[L]) || (b.sSelf ?? -1) - (a.sSelf ?? -1));
+    const LIM = 6;
+    const html = items.map((r, k) => {
+      const u = U[L][r.j];
+      const pct = r.sSelf == null ? "" : `<span class="pct" title="${esc(tr(`${fmtPct(r.sSelf)} of the selection; ${fmtPct(r.sOther)} of this unit`, `占選取範圍 ${fmtPct(r.sSelf)}；占這個單位 ${fmtPct(r.sOther)}`))}">${fmtPct(r.sSelf)}</span>`;
+      return `<button class="ov-item" data-l="${L}" data-i="${r.j}"${k >= LIM ? " hidden" : ""}><span>${nameHTML(u)}${r.j === here[L] ? `<span class="here">${tr("● here", "● 這裡")}</span>` : ""}</span>${pct}</button>`;
+    }).join("");
+    const more = items.length > LIM ? `<button class="ov-more">${tr(`Show all ${items.length}`, `顯示全部 ${items.length} 個`)}</button>` : "";
+    return `<div class="ov-layer"><div class="ov-name">${esc(LAYER[L].title)}</div>${html}${more}</div>`;
+  }).join("");
+  if (!blocks) return isNull(l, i) ? "" : `<p class="hint">${tr("No overlaps with other layers.", "和其他圖層沒有重疊。")}</p>`;
+  return `<div><div class="section-label" style="margin-bottom:6px">${tr("Overlaps with other layers", "與其他圖層重疊")}</div>
+    <p class="hint" style="margin-bottom:10px">${tr("Share of the selected area in each unit.", "選取範圍落在各單位的比例。")}${state.point ? tr(` ● = ${state.addr ? "the " + placeNoun() : "where you clicked"}.`, `● 是${state.addr ? (state.addr.kind === "location" ? "你的位置" : "地址所在") : "點選的位置"}。`) : ""}</p>
+    <div class="ov">${blocks}</div></div>`;
+}
+function peek(L, j) { d3.select("#peek").attr("d", L ? path(FEAT[L][j]) : null); }
+
+// ---------- actions
+function setLayer(l, keepSel) {
+  if (!LAYER[l]) return;
+  if (state.sel && state.sel.layer !== l && !state.addr) { state.sel = null; state.point = null; }  // a new layer starts with nothing selected
+  state.layer = l;
+  if (state.addr) { const i = placeUnit(l); state.sel = i >= 0 ? { layer: l, i } : null; }  // ... unless an address is shown
+  document.querySelectorAll(".layer-btn").forEach(b => b.setAttribute("aria-pressed", b.dataset.layer === l));
+  $("layer-sel").value = l;
+  drawLayer();
+  drawSelection();
+  if (state.addr) renderPanel();
+  else if (!state.sel) renderLayerInfo();
+}
+function setShade(on) {
+  state.shade = on;
+  drawLayer();
+  drawSelection();
+}
+function select(l, i, zoomTo) {
+  state.sel = { layer: l, i };
+  drawSelection();
+  renderUnit();
+  if (zoomTo) zoomToFeature(FEAT[l][i]);
+}
+function goTo(l, i) {
+  const pt = state.point;  // keep the clicked spot, so its units stay marked in the overlap list
+  if (l !== state.layer) setLayer(l, false);
+  state.point = pt;
+  select(l, i, true);
+}
+function visibleMap() {  // width and height of the map not covered by the panel
+  const r = $("map").getBoundingClientRect();
+  const pr = $("panel").getBoundingClientRect();
+  const floating = getComputedStyle($("panel")).position === "absolute";
+  return [floating ? Math.max(200, pr.left - r.left - 14) : r.width, r.height];  // visible map width left of the panel
+}
+function zoomToFeature(f) {
+  const [[x0, y0], [x1, y1]] = path.bounds(f);
+  const [w, h] = visibleMap();
+  const k = Math.max(1, Math.min(16, 0.55 / Math.max((x1 - x0) / w, (y1 - y0) / h)));
+  flyTo(d3.zoomIdentity.translate(w / 2, h / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2));
+}
+function zoomToPoint(x, y, mpp) {  // centre a TWD97 point at mpp metres per screen pixel
+  const [w, h] = visibleMap(), p = proj([x, y]);
+  const k = Math.max(1, Math.min(maxZoomK(), 1 / (proj.scale() * mpp)));
+  flyTo(d3.zoomIdentity.translate(w / 2, h / 2).scale(k).translate(-p[0], -p[1]));
+}
+function flyTo(t) { svg.transition().duration(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 600).call(zoom.transform, t); }
+
+// ---------- shareable address: #layer, #layer/unit, #layer/unit@x,y (x, y in TWD97 metres)
+// A unit is named by its official code where it has one (village, subdistrict, school codes), otherwise by its
+// name; when that is not unique in the layer (or the unit is a blank area) its position in the data is used: ~index.
+function unitKey(u) {  // from the English entry, so a link opens the same unit in either language
+  u = enOf(u);
+  const a = Object.fromEntries(u.a || []);
+  const code = a["Village code"] || a["Code"] || a["School codes"];
+  return (code || u.n).replace(/,\s*/g, "-").replace(/\s*\/\s*/g, "+").replace(/ /g, "_");
+}
+function buildKeys() {
+  for (const l of ORDER) {
+    const k = U[l].map(unitKey), count = {};
+    k.forEach(t => { count[t] = (count[t] || 0) + 1; });
+    KEYS[l] = k.map((t, i) => count[t] > 1 || isNull(l, i) ? "~" + i : t);
+  }
+}
+function writeHash() {
+  const s = state.sel;
+  let h = "#" + state.layer;
+  if (s) {
+    h += "/" + encodeURIComponent(KEYS[s.layer][s.i]);
+    if (state.point) h += "@" + Math.round(state.point[0]) + "," + Math.round(state.point[1]);
+  }
+  if (location.hash !== h) try { history.replaceState(null, "", h); } catch (e) {}
+}
+function applyHash() {
+  const m = /^#([a-z0-9_]+)(?:\/([^@]+))?(?:@(-?\d+),(-?\d+))?$/.exec(location.hash || "");
+  const l = m && LAYER[m[1]] ? m[1] : "district";
+  let i = -1;
+  if (m && LAYER[m[1]] && m[2]) { try { i = KEYS[l].indexOf(decodeURIComponent(m[2])); } catch (e) {} }
+  state.sel = state.point = state.addr = null;
+  setLayer(l, false);
+  if (i < 0) return;
+  const pt = m[3] ? [+m[3], +m[4]] : null;
+  state.point = pt && unitAt(l, pt[0], pt[1]) === i ? pt : null;  // drop a spot that is not inside the unit
+  select(l, i, true);
+}
+
+// ---------- search
+let INDEX = [];
+function buildIndex() {
+  for (const l of ORDER) U[l].forEach((u, i) => {
+    if (isNull(l, i)) return;
+    const en = u.en ? u.en.n : null;  // the Chinese page also finds a unit by its English name
+    INDEX.push({ l, i, t: [u.n, u.z, en, u.s, ...(u.a || []).map(a => a[1])].filter(Boolean).join(" ").toLowerCase(), nm: [u.n, u.z, en].filter(Boolean).join(" ").toLowerCase() });
+  });
+}
+let searchSeq = 0;
+async function runSearch() {
+  const raw = $("q").value.trim(), q = raw.toLowerCase(), box = $("results"), seq = ++searchSeq;
+  if (!q) { box.hidden = true; return; }
+  const words = q.split(/\s+/);
+  const hits = INDEX.filter(e => words.every(w => e.t.includes(w))).slice(0, 40);
+  const unitHTML = list => list.map(h => {
+    const u = U[h.l][h.i];
+    return `<button data-l="${h.l}" data-i="${h.i}"><span class="r-layer">${esc(LAYER[h.l].title)}</span><span>${nameHTML(u)}${u.z && u.z !== u.n ? ` <span class="zh" style="color:var(--ink-2)">${esc(u.z)}</span>` : ""}</span></button>`;
+  }).join("");
+  // units whose name matches first, then streets, then units that match only in a detail (e.g. a polling station's address)
+  const named = hits.filter(h => words.every(w => h.nm.includes(w)));
+  const units = unitHTML(named), more = unitHTML(hits.filter(h => !named.includes(h)));
+  const show = (top, streets) => {
+    box.innerHTML = top + units + streets + more || `<div class="empty">${tr("No match. Try an English or Chinese name, or a street address in Chinese.", "找不到。可以試試中文或英文名稱，或中文地址。")}</div>`;
+    box.hidden = false;
+  };
+  if (!hasCJK(raw)) return show("", "");  // addresses are searched in Chinese
+  show(units || more ? "" : `<div class="r-note">${tr("Looking up the address…", "查詢地址中…")}</div>`, "");  // the units now, addresses when their data is in
+  let res;
+  try { res = await lookupAddress(raw); } catch (e) { res = { error: true }; }
+  if (seq !== searchSeq) return;  // the text has changed since
+  show(...addressResultsHTML(res));
+}
+
+// ---------- addresses: the Civil Affairs house-number data, one file per street, loaded when first needed
+let ADDR = null;  // promise of addr/index.json, with each street name normalised
+const STREETS = {};  // street index -> promise of its house numbers
+const VARIANT = { "台": "臺", "舘": "館", "褔": "福" };  // the same character written two ways
+const normAddr = s => [...String(s || "").normalize("NFKC").replace(/\s+/g, "")].map(c => VARIANT[c] || c).join("");
+const CN_DIGITS = "〇一二三四五六七八九";
+function cnNumber(t) {  // 九十七 -> 97
+  let total = 0, cur = 0;
+  for (const ch of t) {
+    if (ch === "十" || ch === "百") { total += (cur || 1) * (ch === "十" ? 10 : 100); cur = 0; }
+    else cur = ch === "零" ? 0 : CN_DIGITS.indexOf(ch);
+  }
+  return String(total + cur);
+}
+function getJSON(f) { return fetch(DATA + f).then(r => { if (!r.ok) throw new Error(f + " " + r.status); return r.json(); }); }
+function addrIndex() {
+  return ADDR ||= getJSON("addr/index.json").then(ix => { ix.norm = ix.streets.map(([n]) => normAddr(n)); return ix; })
+    .catch(e => { ADDR = null; throw e; });
+}
+function streetRows(k) {
+  return STREETS[k] ||= getJSON(`addr/s${k}.json`).then(rows => { rows.forEach(r => { r.key = normAddr(r[1]); }); return rows; })
+    .catch(e => { delete STREETS[k]; throw e; });
+}
+// "臺北市大安區羅斯福路4段1號3樓" -> district 大安區, street 羅斯福路四段, "1號"
+function parseAddress(ix, text) {
+  let s = String(text).normalize("NFKC").replace(/\s*(地下)?[\d〇一二三四五六七八九十]+樓.*$/, "");  // the floor
+  s = normAddr(s).replace(/^\d{3,6}/, "").replace(/^臺北[市巿]/, "");
+  let d = null;
+  const dm = /^.{1,2}區/.exec(s);
+  if (dm && ix.districts.includes(dm[0])) { d = ix.districts.indexOf(dm[0]); s = s.slice(dm[0].length); }
+  const vm = /^[一-鿿]{1,3}里/.exec(s);  // a village and a lin, as some addresses are written
+  if (vm && U.village.some(u => u.z === vm[0])) s = s.slice(vm[0].length);
+  s = s.replace(/^\d+鄰/, "").replace(/^(\D+?)(\d)段/, (m, a, n) => a + CN_DIGITS[+n] + "段");
+  let k = -1;
+  ix.norm.forEach((n, j) => {
+    if (s.startsWith(n) && (k < 0 || n.length > ix.norm[k].length) && (d == null || ix.streets[j][1].includes(d))) k = j;
+  });
+  if (k < 0) return { d, street: -1, text: s };
+  let rest = s.slice(ix.norm[k].length)
+    .replace(/(^|[巷弄])([〇零一二三四五六七八九十百]+)(?=[號巷弄])/g, (m, a, n) => a + cnNumber(n))
+    .replace(/(\d+)號之(\d+)/, "$1之$2號").replace(/(\d+)-(\d+)/, "$1之$2").replace(/號.*$/, "號");
+  if (/\d$/.test(rest)) rest += "號";
+  return { d, street: k, rest };
+}
+async function lookupAddress(text) {
+  const ix = await addrIndex(), p = parseAddress(ix, text);
+  if (p.street < 0) return { ix, p };
+  const rows = await streetRows(p.street);
+  const here = rows.filter(r => p.d == null || r[0] === p.d);
+  const hits = here.filter(r => r.key === p.rest);
+  let near = [];
+  const m = /^(.*?)(臨)?(\d+)(?:之\d+)?號$/.exec(p.rest);
+  if (!hits.length && m) {  // the closest numbers in the same lane or alley
+    near = here.map(r => [r, /^(.*?)(臨)?(\d+)(?:之\d+)?號$/.exec(r.key)]).filter(([, n]) => n && n[1] === m[1])
+      .sort((a, b) => Math.abs(a[1][3] - m[3]) - Math.abs(b[1][3] - m[3]) || a[0].key.localeCompare(b[0].key)).slice(0, 4).map(([r]) => r);
+  }
+  return { ix, p, hits, near };
+}
+function addrLabel(ix, k, r) { return `臺北市${ix.districts[r[0]]}${ix.streets[k][0]}${r[1]}`; }
+function addressResultsHTML(res) {  // -> [above the units, below the units]
+  if (res.error) return [`<div class="r-note">${tr("The address data could not be loaded.", "無法載入地址資料。")}</div>`, ""];
+  const { ix, p } = res, btn = (k, r, tag) =>
+    `<button data-street-k="${k}" data-row="${esc(r[0] + "|" + r[1])}"><span class="r-layer">${tag}</span><span class="zh">${esc(addrLabel(ix, k, r))}</span></button>`;
+  if (p.street >= 0) {
+    const name = esc(ix.streets[p.street][0]);
+    if (res.hits.length) return [res.hits.map(r => btn(p.street, r, tr("Address", "地址"))).join(""), ""];
+    if (!p.rest) return [`<div class="r-note">${tr(`Add a house number to <span class="zh">${name}</span>.`, `請在 <span class="zh">${name}</span> 後面加上門牌號碼。`)}</div>`, ""];
+    const where = p.d != null ? `<span class="zh">${esc(ix.districts[p.d])}</span>` : "";
+    return [`<div class="r-note">${tr(`No <span class="zh">${name}${esc(p.rest)}</span> in the house-number data${where ? ` for ${where}` : ""}.`,
+      `門牌資料裡沒有${where}<span class="zh">${name}${esc(p.rest)}</span>。`)}</div>`
+      + res.near.map(r => btn(p.street, r, tr("Nearby number", "附近的門牌"))).join(""), ""];
+  }
+  if (p.text.length < 2) return ["", ""];
+  const order = n => [!n.startsWith(p.text), n.length, n.replace(/([一二三四五六七八九])段$/, (m, c) => CN_DIGITS.indexOf(c) + "段")];  // 一段 before 二段
+  const cmp = (x, y) => { const a = order(x[0]), b = order(y[0]); return a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0); };
+  const streets = ix.norm.map((n, j) => [n, j]).filter(([n, j]) => n.includes(p.text) && (p.d == null || ix.streets[j][1].includes(p.d))).sort(cmp).slice(0, 6);
+  return ["", streets.map(([, j]) => `<button data-street="${esc((p.d != null ? ix.districts[p.d] : "") + ix.streets[j][0])}"><span class="r-layer">${tr("Street in ", "路段，位於")}<span class="zh">${esc(ix.streets[j][1].map(d => ix.districts[d]).join("、"))}</span></span><span class="zh">${esc(ix.streets[j][0])}</span></button>`).join("")];
+}
+async function goToAddress(k, district, key) {
+  const ix = await addrIndex(), rows = await streetRows(k);
+  const r = rows.find(r => r[0] === district && r[1] === key);
+  if (!r) return;
+  const [, , x, y, v, lin, ...lu] = r, units = { village: v };
+  ix.villageLayers.forEach((l, j) => { if (ix.villageUnits[v][j] >= 0) units[l] = ix.villageUnits[v][j]; });
+  ix.rows.slice(6).forEach((l, j) => { if (lu[j] >= 0) units[l] = lu[j]; });
+  showPlace({ kind: "address", label: addrLabel(ix, k, r), x, y, v, lin, units });
+}
+// an address or the device's location: a pin, the unit it is in on every layer, kept when the layer changes
+function showPlace(a) {
+  state.addr = a;
+  state.point = [a.x, a.y];
+  const i = placeUnit(state.layer);
+  state.sel = i >= 0 ? { layer: state.layer, i } : null;
+  drawSelection();
+  renderPanel();
+  zoomToPoint(a.x, a.y, METRO_NAMES);
+}
+function placeUnit(l) {  // the unit of layer l that the address is in: from its village and lin where they decide it, else where its point falls
+  const a = state.addr;
+  return a.units && a.units[l] != null ? a.units[l] : unitAt(l, a.x, a.y);
+}
+const placeNoun = () => state.addr && state.addr.kind === "location" ? tr("location", "位置") : tr("address", "地址");
+function addrHTML() {
+  const a = state.addr, list = ORDER.map(L => [L, placeUnit(L)]).filter(([, j]) => j >= 0)
+    .map(([L, j]) => `<dt>${esc(LAYER[L].title)}</dt><dd${L === state.layer ? ' class="cur"' : ""}><button class="addr-go" data-l="${L}" data-i="${j}">${nameHTML(U[L][j])}</button></dd>`).join("");
+  let about;
+  if (a.kind === "address") {
+    const u = U.village[a.v], pv = unitAt("village", a.x, a.y);
+    about = `<p class="hint">${tr(`The house-number data puts it in ${esc(u.n)}${u.z && u.z !== u.n ? ` (<span class="zh">${esc(u.z)}</span>)` : ""}${a.lin ? `, lin ${a.lin}` : ""}.`,
+        `門牌資料記為${esc(u.n)}${a.lin ? ` ${a.lin} 鄰` : ""}。`)}</p>`
+      + (pv >= 0 && pv !== a.v ? `<div class="note">${tr(`Its point on the map falls in ${esc(U.village[pv].n)}. The units below follow the house-number data.`,
+        `它在地圖上的位置落在${esc(U.village[pv].n)}，以下的單位依門牌資料。`)}</div>` : "");
+  } else about = `<p class="hint">${a.acc >= 1 ? tr(`Accurate to about ${fmtInt(Math.round(a.acc))} m, according to your device. `, `裝置回報的精確度約 ${fmtInt(Math.round(a.acc))} 公尺。`) : ""}${tr("Near a boundary, check the map.", "靠近邊界時，請以地圖為準。")}</p>`;
+  return `<div class="addr"><div class="card-head"><div><div class="kicker">${a.kind === "address" ? tr("Address", "地址") : tr("Location", "位置")}</div>`
+    + `<h3${a.kind === "address" || LANG === "zh" ? ' class="zh"' : ""}>${esc(a.label)}</h3></div><button class="x" id="addr-x" aria-label="${tr(`Clear the ${placeNoun()}`, `清除${placeNoun()}`)}">×</button></div>`
+    + `${about}<div class="section-label">${tr("In each layer", "所在單位")}</div><dl class="addr-list">${list}</dl></div>`;
+}
+function bindAddr() {
+  if ($("addr-x")) $("addr-x").onclick = clearAll;
+  $("panel").querySelectorAll(".addr-go").forEach(b => b.addEventListener("click", () => goTo(b.dataset.l, +b.dataset.i)));
+}
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 6000);
+}
+// WGS84 latitude and longitude (from the device) -> TWD97 TM2, EPSG:3826, the coordinates of every layer.
+// Transverse Mercator series on the GRS80 ellipsoid, central meridian 121°E, scale 0.9999, false easting 250,000 m
+// (Snyder 1987, Map Projections: A Working Manual, eq. 8-9 to 8-13). In Taipei it agrees with PROJ to within 1 mm (tested).
+function toTWD97(lat, lon) {
+  const a = 6378137, f = 1 / 298.257222101, k0 = 0.9999, e2 = f * (2 - f), ep2 = e2 / (1 - e2), rad = Math.PI / 180;
+  const p = lat * rad, s = Math.sin(p), c = Math.cos(p), t = Math.tan(p);
+  const N = a / Math.sqrt(1 - e2 * s * s), T = t * t, C = ep2 * c * c, A = (lon - 121) * rad * c;
+  const M = a * ((1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * p - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
+    + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p) - (35 * e2 ** 3 / 3072) * Math.sin(6 * p));
+  return [250000 + k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120),
+    k0 * (M + N * t * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720))];
+}
+function locate() {
+  const b = $("locate");
+  if (!navigator.geolocation) return toast(tr("This browser cannot share its location.", "這個瀏覽器無法提供位置。"));
+  b.setAttribute("aria-busy", "true");
+  navigator.geolocation.getCurrentPosition(pos => {
+    b.removeAttribute("aria-busy");
+    const [x, y] = toTWD97(pos.coords.latitude, pos.coords.longitude);
+    if (unitAt("district", x, y) < 0) return toast(tr("Your location is outside Taipei City.", "你的位置不在臺北市內。"));
+    showPlace({ kind: "location", label: tr("Your location", "你的位置"), x, y, acc: pos.coords.accuracy, units: null });
+  }, err => {
+    b.removeAttribute("aria-busy");
+    toast(err.code === 1 ? tr("Location access was not allowed.", "沒有取得位置的權限。") : tr("Your location could not be found.", "找不到你的位置。"));
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+
+// ---------- start
+// the Chinese page: Chinese names, descriptions and notes for display; the English ones kept in u.en
+function useChinese(zh) {
+  for (const l of ORDER) U[l].forEach((u, i) => {
+    const z = zh.units[l][i];
+    u.en = { n: u.n, s: u.s, a: u.a };
+    u.n = z.n; u.s = z.s; u.a = z.a; u.x = z.x;
+    delete u.z;
+  });
+  POP_MONTH = zh.popMonth;
+}
+async function start() {
+  const unitsZh = LANG === "zh" ? getJSON("units.zh.json") : null;
+  const [aligned, city, units, roads, water, metro, fac, ...off] = await Promise.all(
+    ["aligned.topo.json", "city.topo.json", "units.json", "roads.topo.json", "water.topo.json", "metro.json", "facilities.json", ...OFFICIAL.map(l => `${l}.topo.json`)]
+      .map(getJSON));
+  U = units.units; LAYERS = units.layers; POP_MONTH = units.popMonth; CITY_POP = units.cityPop;
+  buildKeys();  // from the English entries, before the Chinese ones are put in
+  if (unitsZh) useChinese(await unitsZh);
+  BASEMAP.roads = topojson.feature(roads, roads.objects.roads);
+  BASEMAP.water = topojson.feature(water, water.objects.water);
+  METRO = metro;
+  FAC = fac;
+  for (const l of ORDER) {
+    const topo = OFFICIAL.includes(l) ? off[OFFICIAL.indexOf(l)] : aligned;
+    const fc = topojson.feature(topo, topo.objects[l]);
+    const arr = new Array(U[l].length);
+    for (const f of fc.features) arr[f.properties.i] = f;
+    if (arr.some(f => !f)) throw new Error("missing features in " + l);
+    FEAT[l] = arr;
+    BOX[l] = arr.map(f => bbox(f.geometry));
+  }
+  FEAT.districtMesh = topojson.mesh(aligned, aligned.objects.district, (a, b) => a !== b);
+  const cityF = topojson.feature(city, city.objects.district);
+
+  svg = d3.select("#map");
+  gZoom = d3.select("#zoomg");
+  const fit = () => {
+    const r = $("map").getBoundingClientRect();
+    proj = d3.geoIdentity().reflectY(true).fitExtent([[24, 24], [Math.max(r.width - 24, 25), Math.max(r.height - 24, 25)]], cityF);
+    path = d3.geoPath(proj);
+    d3.select("#land").attr("d", path(cityF));
+    d3.select("#edge").attr("d", path(cityF));
+    d3.select("#outside").attr("d", "M-100000,-100000H100000V100000H-100000Z" + path(cityF));  // a frame with the city cut out
+    $("tiles").style.height = r.height + "px";
+    drawBase();
+  };
+  fit();
+  zoom = d3.zoom().scaleExtent([1, maxZoomK()]).on("zoom", ev => {
+    transform = ev.transform;
+    gZoom.attr("transform", transform);
+    placeLabels();
+    hideTip();
+    if (state.base !== "simple") scheduleTiles();
+  });
+  svg.call(zoom).on("dblclick.zoom", null);
+  $("zin").onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1.6);
+  $("zout").onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1 / 1.6);
+  $("zreset").onclick = () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+
+  drawSimpleThumb();
+  drawBaseSwitch();
+  document.addEventListener("click", e => { if (!e.target.closest("#basemaps")) openBaseMenu(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("bm-menu").hidden) { openBaseMenu(false); $("bm-toggle").focus(); } });
+  buildLayerList();
+  buildIndex();
+  applyHash();
+  window.addEventListener("hashchange", applyHash);
+  $("loading").hidden = true;
+  getJSON("overlaps.json").then(j => { OV = j; }, () => { OV = false; }).then(refreshOverlaps);
+  $("locate").onclick = locate;
+  // the other language keeps the layer, the selection and the point: the link takes this page's hash along
+  document.querySelectorAll(".lang").forEach(a => a.addEventListener("click", () => { a.href = a.getAttribute("href").split("#")[0] + location.hash; }));
+
+  let rt;
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { fit(); zoom.scaleExtent([1, maxZoomK()]); drawLayer(); drawSelection(); updateTiles(true); }, 120); }).observe($("map"));
+
+  $("q").addEventListener("input", runSearch);
+  $("q").addEventListener("focus", () => addrIndex().catch(() => {}), { once: true });  // the street list, before the first address is typed
+  $("q").addEventListener("keydown", e => { if (e.key === "Escape") { $("q").value = ""; runSearch(); } if (e.key === "Enter") { const b = $("results").querySelector("button"); if (b) b.click(); } });
+  $("results").addEventListener("click", e => {
+    const st = e.target.closest("button[data-street]");
+    if (st) { $("q").value = st.dataset.street; $("q").focus(); runSearch(); return; }  // a street: now add the number
+    const ad = e.target.closest("button[data-street-k]");
+    if (ad) {
+      $("results").hidden = true; $("q").value = "";
+      const [d, key] = ad.dataset.row.split("|");
+      goToAddress(+ad.dataset.streetK, +d, key);
+      return;
+    }
+    const b = e.target.closest("button[data-l]"); if (!b) return;
+    $("results").hidden = true; $("q").value = "";
+    state.point = null; state.addr = null;
+    goTo(b.dataset.l, +b.dataset.i);
+  });
+  document.addEventListener("click", e => { if (!e.target.closest(".search")) $("results").hidden = true; });
+}
+start().catch(err => { $("loading").textContent = tr("The map data could not be loaded. ", "無法載入地圖資料。") + err.message; console.error(err); });
+</script>
+</body>
+</html>
