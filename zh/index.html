@@ -194,7 +194,8 @@ svg.map { position: relative; }
 .fac-list .fac-note { color: var(--ink-2); font-size: 12.5px; }
 .fac-wide summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
 .fac-wide .fac-list { margin-top: 6px; }
-.fac-links a { color: var(--accent); text-decoration: none; }
+.fac-links a, .fac-list a { color: var(--accent); text-decoration: none; }
+.fac-list a:hover { text-decoration: underline; }
 .fac-links a:hover { text-decoration: underline; }
 .legend .fac-zoom { color: var(--ink-3); }
 /* one page per language: static text is written in both, and the page's language hides the other */
@@ -319,8 +320,8 @@ img { max-width: 100%; }
         <ul>
           <li><a href="../downloads/taipei_boundaries_geojson.zip" download>所有圖層，GeoJSON</a><span class="what">20 個檔案，壓縮檔，4.2 MB</span></li>
           <li><a href="../downloads/taipei_boundaries_gpkg.zip" download>所有圖層，GeoPackage</a><span class="what">一個檔案，壓縮檔，7.3 MB</span></li>
-          <li><a href="../downloads/taipei_boundaries_tables.zip" download>里、鄰對照表，重疊表，設施位置</a><span class="what">4 個 CSV 檔，壓縮檔，574 KB</span></li>
-          <li><a href="../downloads/README_zh.md" download>做法、來源和已知問題</a><span class="what">說明文件，31 KB</span></li>
+          <li><a href="../downloads/taipei_boundaries_tables.zip" download>里、鄰對照表，重疊表，設施位置</a><span class="what">4 個 CSV 檔，壓縮檔，578 KB</span></li>
+          <li><a href="../downloads/README_zh.md" download>做法、來源和已知問題</a><span class="what">說明文件，33 KB</span></li>
         </ul>
       </details>
       <details class="about" id="about">
@@ -427,6 +428,7 @@ const SRC = {
   fireList: [tr("Fire Dept.: fire station locations (2026-09-23)", "消防局 各分隊駐地位置（2026-09-23）"), DT + "a9fa2045-f7a6-4e16-ad26-577748064cdf"],
   eduList: [tr("Dept. of Education: schools of all levels (2026-09-30)", "教育局 臺北市各級學校分布圖（2026-09-30）"), "https://data.gov.tw/dataset/121225"],
   shelters: [tr("Dept. of Social Welfare: evacuation shelters and the villages they serve (2025 list)", "社會局 114年臺北市可供避難收容處所一覽表"), DT + "f327232d-9230-44d0-bf0c-df151802da32"],
+  boch: [tr("Bureau of Cultural Heritage: designated heritage sites, open data (2026-10-12)", "文化部文化資產局 文化資產開放資料（2026-10-12 擷取）"), "https://data.gov.tw/dataset/6246"],
   evacMaps: [tr("District offices: evacuation map of each village, one dataset per district (2026)", "各區公所 各里簡易疏散避難地圖資訊（每區一個資料集，2026）"), "https://data.taipei/dataset?qs=%E5%90%84%E9%87%8C%E7%B0%A1%E6%98%93%E7%96%8F%E6%95%A3%E9%81%BF%E9%9B%A3%E5%9C%B0%E5%9C%96%E8%B3%87%E8%A8%8A"],
 };
 const enOf = u => u.en || u;  // a unit's English name and description, on either page
@@ -467,7 +469,7 @@ const LAYER_EN = {
   segis_l2: { noun: "areas", title: "Statistical areas (level 2)", group: "Statistics & planning",
     about: "As published, on 2015 boundaries.", src: ["segis"] },
   zoning_heritage: { noun: "polygons", title: "Heritage zones", group: "Statistics & planning", patch: true,
-    about: "Preservation zones from the urban-plan zoning map. Zoom in to see them.", src: ["zoning"] },
+    about: "Preservation zones from the urban-plan zoning map, named after the designated heritage sites inside them where there are any. Zoom in to see them.", src: ["zoning"] },
   zoning_industrial: { noun: "polygons", title: "Industrial zones", group: "Statistics & planning", patch: true,
     about: "Zones with codes starting with I, from the urban-plan zoning map.", src: ["zoning"] },
 };
@@ -493,7 +495,7 @@ const LAYER_ZH = {
   postal3: { noun: "個郵遞區號", title: "郵遞區號（3 碼）", group: "市政服務", label: num, about: "每區一個。" },
   subdistrict: { noun: "個次分區", title: "次分區", group: "統計與規劃", about: "照公布的範圍，大多沿著里界。" },
   segis_l2: { noun: "個發布區", title: "統計區（二級發布區）", group: "統計與規劃", about: "照公布的範圍，2015 年的界線。" },
-  zoning_heritage: { noun: "個多邊形", title: "保存區", group: "統計與規劃", about: "都市計畫使用分區圖中的保存區。放大才看得到。" },
+  zoning_heritage: { noun: "個多邊形", title: "保存區", group: "統計與規劃", about: "都市計畫使用分區圖中的保存區；裡面有列管文化資產的，以文化資產命名。放大才看得清楚。" },
   zoning_industrial: { noun: "個多邊形", title: "工業區", group: "統計與規劃", about: "都市計畫使用分區圖中代碼以 I 開頭的分區。" },
 };
 const LAYER = LANG === "zh"
@@ -664,8 +666,10 @@ function placeLabels() {
 }
 // hide a label that would overlap one already placed; larger units are placed first, and hidden labels return when zoomed in
 function declutter() {
-  const texts = d3.select("#labels").selectAll("text").attr("visibility", null).nodes()
-    .sort((p, q) => d3.select(q).datum().a - d3.select(p).datum().a);
+  hideOverlaps(d3.select("#labels").selectAll("text").attr("visibility", null).nodes()
+    .sort((p, q) => d3.select(q).datum().a - d3.select(p).datum().a));
+}
+function hideOverlaps(texts) {  // hide a label that would overlap one already kept; the earlier ones are kept
   const kept = [];
   for (const t of texts) {
     const b = t.getBBox(), r = [b.x - 2, b.y - 1, b.x + b.width + 2, b.y + b.height + 1];
@@ -870,16 +874,18 @@ const FAC_KIND = tr({  // [one, several (panel heading), legend]
   police_station: ["Police station", "Police stations", "Police stations"], health_center: ["Health center", "Health center", "Health centers"],
   school_elementary: ["School", "Schools", "Schools"], school_junior_high: ["School", "Schools", "Schools"],
   fire_brigade: ["Fire station", "Fire stations in this area", "Fire stations"],
-  village: ["Evacuation shelter", "Evacuation shelters", "Evacuation shelters"], polling_2026: ["Polling place", "Polling place", "Polling places"] }, {
+  village: ["Evacuation shelter", "Evacuation shelters", "Evacuation shelters"], polling_2026: ["Polling place", "Polling place", "Polling places"],
+  zoning_heritage: ["Heritage site", "Heritage sites", "Heritage sites"] }, {
   district: ["區公所", "區公所", "區公所"], police_precinct: ["分局", "分局", "分局"],
   police_station: ["派出所", "派出所", "派出所"], health_center: ["健康服務中心", "健康服務中心", "健康服務中心"],
   school_elementary: ["學校", "學校", "學校"], school_junior_high: ["學校", "學校", "學校"],
   fire_brigade: ["消防分隊", "這個區域的消防分隊", "消防分隊"],
-  village: ["避難收容處所", "避難收容處所", "避難收容處所"], polling_2026: ["投開票地點", "投開票地點", "投開票地點"] });
+  village: ["避難收容處所", "避難收容處所", "避難收容處所"], polling_2026: ["投開票地點", "投開票地點", "投開票地點"],
+  zoning_heritage: ["文化資產", "文化資產", "文化資產"] });
 const facDetail = p => p[LANG === "zh" ? 5 : 4];  // the detail line a point carries (a shelter's type and use), in the page's language
 const FAC_SRC = { district: ["agencies", "addr"], police_precinct: ["policeUnits", "addr"], police_station: ["policeUnits", "addr"],
   health_center: ["healthList", "addr"], school_elementary: ["eduList", "agencies", "addr"], school_junior_high: ["eduList", "agencies", "addr"],
-  fire_brigade: ["fireList"], village: ["shelters", "evacMaps", "addr"], polling_2026: ["addr"] };
+  fire_brigade: ["fireList"], village: ["shelters", "evacMaps", "addr"], polling_2026: ["addr"], zoning_heritage: ["boch", "addr"] };
 // layers with hundreds of points: only the selected unit's are drawn until the map is zoomed in as far as for the MRT dots
 const FAC_ZOOM = new Set(["village", "polling_2026"]);
 let FAC = {};
@@ -907,6 +913,7 @@ function placeFacilities() {
     .order();
   g.selectAll("text").data(pts.filter(d => d.on), d => d.k).join("text")
     .attr("class", "fac-lbl").attr("x", d => d.x + 9).attr("y", d => d.y + 4).text(d => d.n);
+  hideOverlaps(g.selectAll("text").attr("visibility", null).nodes());  // several squares close together: the names that fit, the rest return when zoomed in
 }
 function showFacTip(ev, l, d) {
   const tip = $("tip"), r = $("mapbox").getBoundingClientRect();
@@ -920,7 +927,8 @@ function showFacTip(ev, l, d) {
 const NOT_ON_MAP = tr("Not on the map: its address is not in the house-number data", "不在地圖上：門牌資料裡沒有這個地址");
 function facItem(F, k, out) {  // name, address, the detail line the data carries (a shelter's type and use), a note
   const p = F.pts[k];
-  return `<li><span class="zh">${esc(p[2])}</span><span class="fac-addr zh">${esc(p[3])}</span>${facDetail(p) ? `<span class="fac-note">${esc(facDetail(p))}</span>` : ""}${out.has(k) ? `<span class="fac-note">${tr("Stands outside the area it serves", "位在服務範圍之外")}</span>` : ""}</li>`;
+  const name = p[6] ? `<a class="zh" href="${esc(p[6])}" target="_blank" rel="noopener">${esc(p[2])}</a>` : `<span class="zh">${esc(p[2])}</span>`;  // a heritage site links to its page
+  return `<li>${name}<span class="fac-addr zh">${esc(p[3])}</span>${facDetail(p) ? `<span class="fac-note">${esc(facDetail(p))}</span>` : ""}${out.has(k) ? `<span class="fac-note">${tr("Stands outside the area it serves", "位在服務範圍之外")}</span>` : ""}</li>`;
 }
 function facHTML(l, i) {
   const F = FAC[l]; if (!F) return "";
@@ -975,6 +983,8 @@ function facHint(l) {
     "方塊是選取的里的避難收容處所，位置是官方地址；放大可以看到全部。每個里也附上官方的簡易疏散避難圖。");
   if (l === "polling_2026") return tr("A square marks the polling place of the selected area, at its official street address; zoom in to see all of them.",
     "方塊是選取區域的投開票地點，位置是官方地址；放大可以看到全部。");
+  if (l === "zoning_heritage") return tr("Squares mark the designated heritage sites inside the zones, at their official street address or, where that cannot be matched, the Bureau of Cultural Heritage's coordinates. A site only near a zone is not counted.",
+    "方塊是保存區裡列管的文化資產，位置是官方地址；地址對不到的，用文化資產局的坐標。只在保存區旁邊的不算。");
   return tr(`Squares mark each ${FAC_KIND[l][0].toLowerCase()}, at its official street address.`, `方塊是各${FAC_KIND[l][0]}，位置是官方地址。`);
 }
 function renderPanel() { if (state.sel) renderUnit(); else renderLayerInfo(); }
@@ -1346,6 +1356,18 @@ function locate() {
 }
 
 // ---------- start
+// a heritage zone takes the names of the designated heritage sites inside it; its zone type becomes the second line.
+// After buildKeys, so links keep their keys. Zones with no site inside keep their zone type as the name.
+function nameHeritageZones() {
+  const F = FAC.zoning_heritage;
+  if (!F) return;
+  U.zoning_heritage.forEach((u, i) => {
+    const names = (F.units[i] || []).map(k => F.pts[k][2]);
+    if (!names.length) return;
+    u.s = u.n;
+    u.n = names.length > 3 ? tr(`${names[0]} and ${names.length - 1} more`, `${names[0]}等 ${names.length} 處`) : names.join("、");
+  });
+}
 // the Chinese page: Chinese names, descriptions and notes for display; the English ones kept in u.en
 function useChinese(zh) {
   for (const l of ORDER) U[l].forEach((u, i) => {
@@ -1368,6 +1390,7 @@ async function start() {
   BASEMAP.water = topojson.feature(water, water.objects.water);
   METRO = metro;
   FAC = fac;
+  nameHeritageZones();
   for (const l of ORDER) {
     const topo = OFFICIAL.includes(l) ? off[OFFICIAL.indexOf(l)] : aligned;
     const fc = topojson.feature(topo, topo.objects[l]);
