@@ -1,7 +1,4 @@
-# Taipei Boundaries 臺北市邊界圖層
-
-Electoral, school, police, court and statistical boundaries in Taipei, from official data.
-臺北市的選區、學區、警察、法院和統計區界線，全部來自官方資料。
+# Taipei Boundaries
 
 - Map: https://lsxx20.github.io/taipei-boundaries/
 - 中文版：https://lsxx20.github.io/taipei-boundaries/zh/
