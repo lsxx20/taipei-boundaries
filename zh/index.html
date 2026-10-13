@@ -16,9 +16,28 @@
 <link rel="alternate" hreflang="en" href="https://lsxx20.github.io/taipei-boundaries/">
 <link rel="alternate" hreflang="zh-Hant" href="https://lsxx20.github.io/taipei-boundaries/zh/">
 <title>臺北市邊界圖層</title>
+<script>
+// Start the downloads the first view needs at once, before the fonts and the map scripts arrive.
+// The first view draws a layer made of whole villages. The layers made of lin (polling stations, school zones), the
+// official-shape layers and the roads follow once the map is up (loadRest), unless the link opens one of those layers.
+const DATA = "../data/";  // where the data files are; web/site.py sets "data/" ("../data/" on the Chinese page)
+const LIN = ["polling_2026", "school_elementary", "school_junior_high"];
+const OFFICIAL = ["subdistrict", "segis_l2", "zoning_heritage", "zoning_industrial"];
+const geoFile = l => LIN.includes(l) ? "lin.topo.json" : OFFICIAL.includes(l) ? `${l}.topo.json` : "villages.topo.json";  // the file with a layer's shapes
+const LOADED = {};  // data file -> promise of its contents: each file is fetched once (one that failed is tried again)
+function load(f) {
+  return LOADED[f] ||= fetch(DATA + f).then(r => { if (!r.ok) throw new Error(f + " " + r.status); return r.json(); })
+    .catch(e => { delete LOADED[f]; throw e; });
+}
+const FIRST = ["villages.topo.json", "city.topo.json", "units.json", "water.topo.json", "metro.json", "facilities.json"];
+for (const f of [...FIRST, ...(document.documentElement.lang.startsWith("zh") ? ["units.zh.json"] : []),
+                 geoFile((/^#([a-z0-9_]+)/.exec(location.hash) || [])[1])])  // a link to a layer from a later file: that file now too
+  load(f).catch(() => {});  // a failure is reported where the file is used
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<!-- the fonts do not hold up the page: until they arrive, text shows in the fallback font -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+TC:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Layout: one-screen map app. Sidebar (layers, search, details) on the left, map on the right;
    on phones the map sits on top and the panel scrolls below it. */
@@ -175,6 +194,9 @@ svg.map { position: relative; }
 .bm-menu button:hover .bm-thumb { border-color: var(--ink-3); }
 .bm-menu button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
 .bm-menu button[aria-pressed="true"] .bm-thumb { border-color: var(--ink); }
+/* a base map whose tiles the city's server is not sending: a plain square, and a note under its name */
+.bm-thumb.bm-off { background: var(--bg); }
+.bm-note { color: var(--ink-3); font-size: 10px; font-weight: 400; }
 .legend .attrib { color: var(--ink-3); font-size: 11px; display: block; }
 .legend .attrib a { color: inherit; }
 .land { fill: var(--land); }
@@ -214,7 +236,7 @@ header.top { position: relative; }
 .addr-list .cur button { font-weight: 600; }
 .results .r-note { padding: 8px 12px 4px; color: var(--ink-3); }
 .toast { position: absolute; left: 62px; top: 14px; max-width: min(320px, calc(100% - 76px)); z-index: 6; padding: 7px 10px;
-  border-radius: 6px; background: var(--ink); color: var(--panel); font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+  border-radius: 6px; background: var(--ink); color: var(--panel); font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: pre-line; }
 .tools button svg { display: block; margin: auto; }
 .tools button[aria-busy="true"] svg { opacity: .35; }
 .unit.shaded { fill-opacity: .82; }
@@ -393,8 +415,8 @@ img { max-width: 100%; }
 if (document.documentElement.lang.startsWith("zh"))
   for (const a of ["placeholder", "aria-label", "title"]) document.querySelectorAll(`[data-zh-${a}]`).forEach(e => e.setAttribute(a, e.getAttribute(`data-zh-${a}`)));
 </script>
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="../lib/d3.min.js"></script>
+<script src="../lib/topojson-client.min.js"></script>
 <script>
 "use strict";
 const LANG = document.documentElement.lang.startsWith("zh") ? "zh" : "en";  // web/site.py makes one page per language
@@ -504,7 +526,6 @@ const LAYER = LANG === "zh"
 const ORDER = ["district", "village", "council_2026", "legislator", "polling_2026", "school_elementary", "school_junior_high",
   "police_precinct", "police_station", "fire_brigade", "court_district", "court_summary", "sanitation", "health_center",
   "postal3", "subdistrict", "segis_l2", "zoning_heritage", "zoning_industrial"];
-const OFFICIAL = ["subdistrict", "segis_l2", "zoning_heritage", "zoning_industrial"];
 const NULLS = new Set(["Not determined", "Station not published"]);
 const DOWNLOADS = {"district": ["downloads/layers/taipei_district.zip", "112 KB"], "village": ["downloads/layers/taipei_village.zip", "315 KB"], "council_2026": ["downloads/layers/taipei_council_2026.zip", "85 KB"], "legislator": ["downloads/layers/taipei_legislator.zip", "98 KB"], "polling_2026": ["downloads/layers/taipei_polling_2026.zip", "630 KB"], "school_elementary": ["downloads/layers/taipei_school_elementary.zip", "280 KB"], "school_junior_high": ["downloads/layers/taipei_school_junior_high.zip", "231 KB"], "police_precinct": ["downloads/layers/taipei_police_precinct.zip", "116 KB"], "police_station": ["downloads/layers/taipei_police_station.zip", "193 KB"], "fire_brigade": ["downloads/layers/taipei_fire_brigade.zip", "81 KB"], "court_district": ["downloads/layers/taipei_court_district.zip", "68 KB"], "court_summary": ["downloads/layers/taipei_court_summary.zip", "84 KB"], "sanitation": ["downloads/layers/taipei_sanitation.zip", "112 KB"], "health_center": ["downloads/layers/taipei_health_center.zip", "112 KB"], "postal3": ["downloads/layers/taipei_postal3.zip", "112 KB"], "subdistrict": ["downloads/layers/taipei_subdistrict.zip", "179 KB"], "segis_l2": ["downloads/layers/taipei_segis_l2.zip", "447 KB"], "zoning_heritage": ["downloads/layers/taipei_zoning_heritage.zip", "7 KB"], "zoning_industrial": ["downloads/layers/taipei_zoning_industrial.zip", "51 KB"]};  // web/site.py fills this in: {layer: [zip path, size]}
 
@@ -517,7 +538,6 @@ let KEYS = {};  // per layer: the token that names each unit in the address
 let U, OV, FEAT = {}, BOX = {}, LAYERS, proj, path, zoom, svg, gZoom, transform = d3.zoomIdentity;
 let BASEMAP = {}, METRO = [], POP_MONTH = "", CITY_POP = 0;
 const state = { layer: "district", sel: null, point: null, addr: null, shade: false, base: "simple" };
-const DATA = "../data/";  // where the data files are; web/site.py sets "data/" ("../data/" on the Chinese page)
 const BASE = "../";  // the site folder, for the downloads; web/site.py sets "../" on the Chinese page
 const BREAKS = [5000, 15000, 25000, 40000];  // residents per km², fixed so layers can be compared
 const NOPOP = {
@@ -581,8 +601,48 @@ function contains(geom, x, y) {
   }
   return false;
 }
+// ---------- layer shapes: each file loads once; a layer's features are made the first time the layer is needed
+const TOPO = {};  // data file -> its topology, once it is in
+async function topology(file) {
+  if (TOPO[file]) return TOPO[file];
+  if (file === "lin.topo.json") {  // its arc numbers continue the villages file's: append its arcs (same quantization)
+    const [vil, lin] = await Promise.all([load("villages.topo.json"), load(file)]);
+    return TOPO[file] ||= { type: "Topology", transform: vil.transform, arcs: vil.arcs.concat(lin.arcs), objects: lin.objects };
+  }
+  return TOPO[file] ||= await load(file);
+}
+const ready = l => !!TOPO[geoFile(l)];
+function shapes(l) {  // the layer's features in unit order (its file must be in)
+  if (!FEAT[l]) {
+    const topo = TOPO[geoFile(l)], fc = topojson.feature(topo, topo.objects[l]), arr = new Array(U[l].length);
+    for (const f of fc.features) arr[f.properties.i] = f;
+    if (arr.some(f => !f)) throw new Error("missing features in " + l);
+    FEAT[l] = arr;
+    BOX[l] = arr.map(f => bbox(f.geometry));
+  }
+  return FEAT[l];
+}
+let ALL;  // promise: every layer's file is in
+function loadRest() {  // after the first view: the other layers and the roads, then the overlap table
+  ALL = Promise.all(["lin.topo.json", ...OFFICIAL.map(l => `${l}.topo.json`)].map(topology));
+  ALL.catch(() => {});  // reported where it is used
+  const roads = load("roads.topo.json").then(roads => {
+    BASEMAP.roads = topojson.feature(roads, roads.objects.roads);
+    drawBase();
+    drawSimpleThumb();
+  }, () => {});  // without them the Simple base map shows the river zones only
+  // the overlap table, the largest file, comes last; its list marks the clicked spot's unit on every layer, so it needs all the shapes
+  Promise.all([ALL, roads]).then(() => { prepareRest(); return getJSON("overlaps.json"); }).then(j => { OV = j; }, () => { OV = false; }).then(refreshOverlaps);
+}
+function prepareRest() {  // the features of the layers not shown yet, one layer at a time while the page is idle
+  const todo = ORDER.filter(l => !FEAT[l]), idle = window.requestIdleCallback || (f => setTimeout(f, 30));
+  const next = () => { const l = todo.shift(); if (l === undefined) return; shapes(l); idle(next); };
+  idle(next);
+}
+const allLayers = () => ALL.catch(() => toast(tr("Part of the map data could not be loaded. Reload the page to see every layer.",
+  "部分地圖資料無法載入，請重新整理頁面以顯示所有圖層。")));
 function unitAt(layer, x, y) {
-  const f = FEAT[layer], b = BOX[layer];
+  const f = shapes(layer), b = BOX[layer];
   for (let i = 0; i < f.length; i++) {
     const bb = b[i];
     if (x < bb[0] || x > bb[2] || y < bb[1] || y > bb[3]) continue;
@@ -615,7 +675,7 @@ function buildLayerList() {
 
 // ---------- drawing
 function drawLayer() {
-  const l = state.layer, m = LAYER[l], feats = FEAT[l];
+  const l = state.layer, m = LAYER[l], feats = shapes(l);
   const sparse = feats.length <= 20;
   const g = d3.select("#units");
   g.selectAll("path").remove();
@@ -641,8 +701,8 @@ function drawLabels() {
   const l = state.layer, m = LAYER[l];
   const lab = d3.select("#labels");
   lab.selectAll("text").remove();
-  if (!m.label || FEAT[l].length > 20) return;
-  const data = FEAT[l].map((f, i) => {
+  if (!m.label || shapes(l).length > 20) return;
+  const data = shapes(l).map((f, i) => {
     let geom = f.geometry;
     if (geom.type === "MultiPolygon") { // label the largest part
       let best = null, ba = -1;
@@ -700,7 +760,7 @@ function drawLegend() {
 }
 function drawBase() {
   d3.select("#water").attr("d", path(BASEMAP.water));
-  d3.select("#roads").attr("d", path(BASEMAP.roads));
+  d3.select("#roads").attr("d", BASEMAP.roads ? path(BASEMAP.roads) : null);  // the roads arrive after the first view
 }
 // MRT stations appear only when zoomed in, like the stations on the NYC Boundaries base map. The thresholds are in
 // metres per screen pixel, so they mean the same on a phone and a desktop: 8 is reached by selecting a village, a school
@@ -726,7 +786,7 @@ function placeMetro() {
 }
 function drawSelection() {
   const s = state.sel;
-  d3.select("#sel").attr("d", s ? path(FEAT[s.layer][s.i]) : null);
+  d3.select("#sel").attr("d", s ? path(shapes(s.layer)[s.i]) : null);
   placeLabels();
   drawLegend();
   writeHash();
@@ -801,7 +861,7 @@ function updateTiles(load) {
       const img = new Image(), t = { img, z: z1, r, c, done: false };
       img.alt = "";
       img.decoding = "async";
-      img.onload = () => { t.done = true; sweep(); };
+      img.onload = () => { t.done = t.ok = true; if (DOWN[state.base]) { delete DOWN[state.base]; drawBaseSwitch(); } sweep(); };
       img.onerror = () => { t.done = true; img.remove(); sweep(); };
       img.src = bm.url(z1, r, c);
       TILES.set(key, t);
@@ -815,7 +875,19 @@ function updateTiles(load) {
 // It always checks the current view: a slow tile from an earlier view must not clear the newer tiles.
 function sweep() {
   for (const k of tileKeys) { const t = TILES.get(k); if (!t || !t.done) return; }
+  if (tileKeys.size && ![...tileKeys].some(k => TILES.get(k).ok)) tilesFailed();  // the server sent none of them
   for (const [k, t] of TILES) if (!tileKeys.has(k)) { t.img.remove(); TILES.delete(k); }
+}
+// The city's tile server is sometimes down (it then answers "此服務無法使用。", "this service is unavailable").
+// Its base maps are then marked unavailable in the switch, and choosing one says so once.
+const DOWN = {};  // base map -> true while its tiles are not arriving
+let downNoted = null;  // the base map the note was shown for, since it was chosen
+function tilesFailed() {
+  const k = state.base;
+  baseDown(k);
+  if (downNoted === k) return;
+  downNoted = k;
+  toast(tr(`${BASEMAPS[k].name} is not loading.\nThe city’s map server is not responding.`, `${BASEMAPS[k].name}目前載不到：都發局的伺服器沒有回應。`));
 }
 function scheduleTiles() {
   updateTiles(false);  // move and scale what is already there on every frame
@@ -825,6 +897,7 @@ function scheduleTiles() {
 function setBase(k) {
   if (!BASEMAPS[k] || k === state.base) return;
   state.base = k;
+  downNoted = null;
   const bm = BASEMAPS[k];
   TILES.forEach(t => t.img.remove()); TILES.clear();
   $("tiles").className = "tiles" + (bm.cls ? " " + bm.cls : "");
@@ -844,24 +917,39 @@ function setBase(k) {
 const THUMB = { z: 10, r: 10674, c: 8376 };
 const LAYERS_ICON = `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 4.2 6 6.9 1 4.2Z" fill="currentColor"></path><path d="M1.6 6.6 6 9 10.4 6.6" fill="none" stroke="currentColor" stroke-width="1.3"></path></svg>`;
 let SIMPLE_THUMB = "";
-function drawSimpleThumb() {
+function drawSimpleThumb() {  // drawn again when the roads arrive
   const span = 256 * WMTS.res[THUMB.z], x0 = WMTS.x0 + THUMB.c * span, y1 = WMTS.y0 - THUMB.r * span, s = 64 / span;
   const p = d3.geoPath(d3.geoIdentity().reflectY(true).scale(s).translate([-x0 * s, y1 * s]).clipExtent([[0, 0], [64, 64]]));
-  SIMPLE_THUMB = `<svg class="bm-thumb" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" style="fill:var(--land)"></rect>`
-    + `<path d="${p(BASEMAP.water) || ""}" style="fill:var(--water)"></path><path d="${p(BASEMAP.roads) || ""}" style="fill:var(--road)"></path></svg>`;
+  SIMPLE_THUMB = `<svg class="bm-thumb" data-simple viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" style="fill:var(--land)"></rect>`
+    + `<path d="${p(BASEMAP.water) || ""}" style="fill:var(--water)"></path><path d="${(BASEMAP.roads && p(BASEMAP.roads)) || ""}" style="fill:var(--road)"></path></svg>`;
+  document.querySelectorAll("#basemaps [data-simple]").forEach(e => { e.outerHTML = SIMPLE_THUMB; });
 }
-function thumb(k, lazy) {
+const NOTE_DOWN = () => `<span class="bm-note">${tr("Unavailable now", "暫時無法使用")}</span>`;
+function thumb(k, lazy) {  // a street-map or aerial thumbnail is one tile from the city's server
   const b = BASEMAPS[k];
-  return b.url ? `<img class="bm-thumb ${b.cls}" alt=""${lazy ? ' loading="lazy"' : ""} src="${b.url(THUMB.z, THUMB.r, THUMB.c)}">` : SIMPLE_THUMB;
+  if (!b.url) return SIMPLE_THUMB;
+  if (DOWN[k]) return `<span class="bm-thumb bm-off"></span>`;
+  return `<img class="bm-thumb ${b.cls}" alt="" data-thumb="${k}"${lazy ? ' loading="lazy"' : ""} src="${b.url(THUMB.z, THUMB.r, THUMB.c)}">`;
 }
 function drawBaseSwitch() {
   const preview = state.base === "aerial" ? "simple" : "aerial";  // like Google: the closed button shows another base map
   $("basemaps").innerHTML = `<button type="button" class="bm-toggle" id="bm-toggle" aria-expanded="false" aria-controls="bm-menu"
       aria-label="${tr(`Base map: ${BASEMAPS[state.base].name}. Choose another`, `底圖：${BASEMAPS[state.base].name}，選擇其他底圖`)}">${thumb(preview, false)}<span class="bm-label">${LAYERS_ICON}${tr("Layers", "圖層")}</span></button>
     <div class="bm-menu" id="bm-menu" role="group" aria-label="${tr("Base map", "底圖")}" hidden>${Object.entries(BASEMAPS).map(([k, b]) =>
-      `<button type="button" data-base="${k}" aria-pressed="${state.base === k}">${thumb(k, true)}<span>${b.name}</span></button>`).join("")}</div>`;
+      `<button type="button" data-base="${k}" aria-pressed="${state.base === k}">${thumb(k, true)}<span>${b.name}</span>${b.url && DOWN[k] ? NOTE_DOWN() : ""}</button>`).join("")}</div>`;
   $("bm-toggle").onclick = () => openBaseMenu($("bm-menu").hidden);
   $("bm-menu").querySelectorAll("[data-base]").forEach(b => { b.onclick = () => { openBaseMenu(false); setBase(b.dataset.base); $("bm-toggle").focus(); }; });
+  $("basemaps").querySelectorAll("img[data-thumb]").forEach(img => {
+    img.onerror = () => baseDown(img.dataset.thumb);
+    if (img.complete && !img.naturalWidth) baseDown(img.dataset.thumb);  // it failed before the handler was set
+  });
+}
+function baseDown(k) {  // mark it in place, so an open menu stays open
+  if (DOWN[k]) return;
+  DOWN[k] = true;
+  $("basemaps").querySelectorAll(`img[data-thumb="${k}"]`).forEach(img => { img.outerHTML = thumb(k); });
+  const b = $("basemaps").querySelector(`[data-base="${k}"]`);
+  if (b && !b.querySelector(".bm-note")) b.insertAdjacentHTML("beforeend", NOTE_DOWN());
 }
 function openBaseMenu(open) {
   $("bm-menu").hidden = !open;
@@ -1079,11 +1167,24 @@ function renderOverlaps(l, i) {
     <p class="hint" style="margin-bottom:10px">${tr("Share of the selected area in each unit.", "選取範圍落在各單位的比例。")}${state.point ? tr(` ● = ${state.addr ? "the " + placeNoun() : "where you clicked"}.`, `● 是${state.addr ? (state.addr.kind === "location" ? "你的位置" : "地址所在") : "點選的位置"}。`) : ""}</p>
     <div class="ov">${blocks}</div></div>`;
 }
-function peek(L, j) { d3.select("#peek").attr("d", L ? path(FEAT[L][j]) : null); }
+function peek(L, j) { d3.select("#peek").attr("d", L ? path(shapes(L)[j]) : null); }
 
 // ---------- actions
-function setLayer(l, keepSel) {
-  if (!LAYER[l]) return;
+let layerSeq = 0, layerShown = false, started = false;  // started: start() is done (until then it shows and hides "Loading" itself)
+// Returns whether the layer was drawn: not when its file could not be loaded, or another layer was chosen meanwhile.
+// A layer whose file is in is drawn at once; one from a file still on its way waits for it behind "Loading".
+async function setLayer(l, keepSel) {
+  if (!LAYER[l]) return false;
+  const seq = ++layerSeq;
+  if (!ready(l)) {
+    $("loading").hidden = false;
+    try { await topology(geoFile(l)); } catch (e) {
+      if (seq === layerSeq) { if (started) $("loading").hidden = true; toast(tr("This layer could not be loaded. Reload the page to try again.", "無法載入這個圖層，請重新整理頁面再試一次。")); }
+      return false;
+    }
+    if (seq !== layerSeq) return false;
+  }
+  layerShown = true;
   if (state.sel && state.sel.layer !== l && !state.addr) { state.sel = null; state.point = null; }  // a new layer starts with nothing selected
   state.layer = l;
   if (state.addr) { const i = placeUnit(l); state.sel = i >= 0 ? { layer: l, i } : null; }  // ... unless an address is shown
@@ -1093,6 +1194,8 @@ function setLayer(l, keepSel) {
   drawSelection();
   if (state.addr) renderPanel();
   else if (!state.sel) renderLayerInfo();
+  if (started) $("loading").hidden = true;  // after drawing: a wait for this layer, or for one chosen before it, is over
+  return true;
 }
 function setShade(on) {
   state.shade = on;
@@ -1103,11 +1206,11 @@ function select(l, i, zoomTo) {
   state.sel = { layer: l, i };
   drawSelection();
   renderUnit();
-  if (zoomTo) zoomToFeature(FEAT[l][i]);
+  if (zoomTo) zoomToFeature(shapes(l)[i]);
 }
-function goTo(l, i) {
+async function goTo(l, i) {
   const pt = state.point;  // keep the clicked spot, so its units stay marked in the overlap list
-  if (l !== state.layer) setLayer(l, false);
+  if (l !== state.layer && !(await setLayer(l, false))) return;
   state.point = pt;
   select(l, i, true);
 }
@@ -1155,13 +1258,13 @@ function writeHash() {
   }
   if (location.hash !== h) try { history.replaceState(null, "", h); } catch (e) {}
 }
-function applyHash() {
+async function applyHash() {
   const m = /^#([a-z0-9_]+)(?:\/([^@]+))?(?:@(-?\d+),(-?\d+))?$/.exec(location.hash || "");
   const l = m && LAYER[m[1]] ? m[1] : "district";
   let i = -1;
   if (m && LAYER[m[1]] && m[2]) { try { i = KEYS[l].indexOf(decodeURIComponent(m[2])); } catch (e) {} }
   state.sel = state.point = state.addr = null;
-  setLayer(l, false);
+  if (!(await setLayer(l, false))) return;
   if (i < 0) return;
   const pt = m[3] ? [+m[3], +m[4]] : null;
   state.point = pt && unitAt(l, pt[0], pt[1]) === i ? pt : null;  // drop a spot that is not inside the unit
@@ -1287,6 +1390,7 @@ async function goToAddress(k, district, key) {
   const [, , x, y, v, lin, ...lu] = r, units = { village: v };
   ix.villageLayers.forEach((l, j) => { if (ix.villageUnits[v][j] >= 0) units[l] = ix.villageUnits[v][j]; });
   ix.rows.slice(6).forEach((l, j) => { if (lu[j] >= 0) units[l] = lu[j]; });
+  await allLayers();  // the address is listed in a unit of every layer
   showPlace({ kind: "address", label: addrLabel(ix, k, r), x, y, v, lin, units });
 }
 // an address or the device's location: a pin, the unit it is in on every layer, kept when the layer changes
@@ -1301,7 +1405,8 @@ function showPlace(a) {
 }
 function placeUnit(l) {  // the unit of layer l that the address is in: from its village and lin where they decide it, else where its point falls
   const a = state.addr;
-  return a.units && a.units[l] != null ? a.units[l] : unitAt(l, a.x, a.y);
+  if (a.units && a.units[l] != null) return a.units[l];
+  return ready(l) ? unitAt(l, a.x, a.y) : -1;  // a layer whose file could not be loaded is left out
 }
 const placeNoun = () => state.addr && state.addr.kind === "location" ? tr("location", "位置") : tr("address", "地址");
 function addrHTML() {
@@ -1348,7 +1453,7 @@ function locate() {
     b.removeAttribute("aria-busy");
     const [x, y] = toTWD97(pos.coords.latitude, pos.coords.longitude);
     if (unitAt("district", x, y) < 0) return toast(tr("Your location is outside Taipei City.", "你的位置不在臺北市內。"));
-    showPlace({ kind: "location", label: tr("Your location", "你的位置"), x, y, acc: pos.coords.accuracy, units: null });
+    allLayers().then(() => showPlace({ kind: "location", label: tr("Your location", "你的位置"), x, y, acc: pos.coords.accuracy, units: null }));
   }, err => {
     b.removeAttribute("aria-busy");
     toast(err.code === 1 ? tr("Location access was not allowed.", "沒有取得位置的權限。") : tr("Your location could not be found.", "找不到你的位置。"));
@@ -1379,28 +1484,18 @@ function useChinese(zh) {
   POP_MONTH = zh.popMonth;
 }
 async function start() {
-  const unitsZh = LANG === "zh" ? getJSON("units.zh.json") : null;
-  const [aligned, city, units, roads, water, metro, fac, ...off] = await Promise.all(
-    ["aligned.topo.json", "city.topo.json", "units.json", "roads.topo.json", "water.topo.json", "metro.json", "facilities.json", ...OFFICIAL.map(l => `${l}.topo.json`)]
-      .map(getJSON));
+  // the first view's files: their downloads started in the head, before the map scripts
+  const [villages, city, units, water, metro, fac] = await Promise.all(FIRST.map(load));
+  const unitsZh = LANG === "zh" ? await load("units.zh.json") : null;
   U = units.units; LAYERS = units.layers; POP_MONTH = units.popMonth; CITY_POP = units.cityPop;
   buildKeys();  // from the English entries, before the Chinese ones are put in
-  if (unitsZh) useChinese(await unitsZh);
-  BASEMAP.roads = topojson.feature(roads, roads.objects.roads);
+  if (unitsZh) useChinese(unitsZh);
+  TOPO["villages.topo.json"] = villages;
   BASEMAP.water = topojson.feature(water, water.objects.water);
   METRO = metro;
   FAC = fac;
   nameHeritageZones();
-  for (const l of ORDER) {
-    const topo = OFFICIAL.includes(l) ? off[OFFICIAL.indexOf(l)] : aligned;
-    const fc = topojson.feature(topo, topo.objects[l]);
-    const arr = new Array(U[l].length);
-    for (const f of fc.features) arr[f.properties.i] = f;
-    if (arr.some(f => !f)) throw new Error("missing features in " + l);
-    FEAT[l] = arr;
-    BOX[l] = arr.map(f => bbox(f.geometry));
-  }
-  FEAT.districtMesh = topojson.mesh(aligned, aligned.objects.district, (a, b) => a !== b);
+  FEAT.districtMesh = topojson.mesh(villages, villages.objects.district, (a, b) => a !== b);
   const cityF = topojson.feature(city, city.objects.district);
 
   svg = d3.select("#map");
@@ -1429,15 +1524,16 @@ async function start() {
   $("zreset").onclick = () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
 
   drawSimpleThumb();
+  buildLayerList();
+  buildIndex();
+  await applyHash();  // the first layer (a link to a layer from a later file waits for that file)
+  if (!layerShown) await setLayer("district", false);  // its file could not be loaded
+  window.addEventListener("hashchange", applyHash);
+  loadRest();
+  // the base map switch after the map: its preview is a tile from the city's server
   drawBaseSwitch();
   document.addEventListener("click", e => { if (!e.target.closest("#basemaps")) openBaseMenu(false); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("bm-menu").hidden) { openBaseMenu(false); $("bm-toggle").focus(); } });
-  buildLayerList();
-  buildIndex();
-  applyHash();
-  window.addEventListener("hashchange", applyHash);
-  $("loading").hidden = true;
-  getJSON("overlaps.json").then(j => { OV = j; }, () => { OV = false; }).then(refreshOverlaps);
   $("locate").onclick = locate;
   // the other language keeps the layer, the selection and the point: the link takes this page's hash along
   document.querySelectorAll(".lang").forEach(a => a.addEventListener("click", () => { a.href = a.getAttribute("href").split("#")[0] + location.hash; }));
@@ -1464,6 +1560,8 @@ async function start() {
     goTo(b.dataset.l, +b.dataset.i);
   });
   document.addEventListener("click", e => { if (!e.target.closest(".search")) $("results").hidden = true; });
+  started = true;
+  $("loading").hidden = true;  // last, once everything is wired up
 }
 start().catch(err => { $("loading").textContent = tr("The map data could not be loaded. ", "無法載入地圖資料。") + err.message; console.error(err); });
 </script>
